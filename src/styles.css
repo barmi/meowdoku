@@ -365,10 +365,27 @@ button {
   pointer-events: auto;
 }
 
-.banner svg {
+.banner .ico svg {
+  display: block;
   flex: none;
   width: calc(36 * var(--px));
   height: calc(36 * var(--px));
+}
+
+.banner .msg {
+  flex: 1;
+}
+
+.banner .close {
+  flex: none;
+  align-self: flex-start;
+  margin-top: calc(6 * var(--px));
+  font-size: calc(14 * var(--px));
+  color: var(--ink-soft);
+}
+
+.banner {
+  cursor: pointer;
 }
 
 /* 판 */

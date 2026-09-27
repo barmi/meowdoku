@@ -86,7 +86,6 @@ export class GameView {
   private scoreEl!: HTMLElement;
   private banner!: HTMLElement;
   private bannerTimer = 0;
-  private highlightTimer = 0;
   private cursor = -1;
   private drag: { start: number; last: number; mode: 'x' | 'erase' | null } | null = null;
   /** 더블탭 판단용 — 직전 탭의 칸·시각·그 전 표시 */
@@ -164,7 +163,7 @@ export class GameView {
       </div>
       <div class="rules-wrap">
         <div class="rules">${RULES.map(([spec, text]) => `<div class="rule">${miniGrid(spec)}<span>${text}</span></div>`).join('')}</div>
-        <div class="banner" role="status">${use('art-bulb')}<div class="msg"></div></div>
+        <div class="banner" role="status" title="눌러서 닫기"><span class="ico">${use('art-bulb')}</span><div class="msg"></div><span class="close" aria-hidden="true">✕</span></div>
       </div>
       <div class="board-wrap">
         <div class="board" role="grid" tabindex="0" aria-label="${n}×${n} 퍼즐 판" style="--n:${n}">${cells}</div>
@@ -631,16 +630,24 @@ export class GameView {
     });
   }
 
-  showMessage(message: string, ms = 5200): void {
+  /**
+   * 규칙 카드 자리에 뜨는 말풍선. ms 를 주지 않으면 누를 때까지 그대로 둔다 — 힌트는 읽고 따라 둘
+   * 시간이 필요하다 (#9). 쥐 안내처럼 잠깐 알리는 말은 ms 로 저절로 닫는다.
+   */
+  showMessage(message: string, opts: { icon?: string; ms?: number } = {}): void {
+    const { icon = 'art-bulb', ms = 0 } = opts;
+    this.banner.querySelector('.ico')!.innerHTML = use(icon);
     this.banner.querySelector('.msg')!.textContent = message;
     this.banner.classList.add('show');
     clearTimeout(this.bannerTimer);
-    this.bannerTimer = window.setTimeout(() => this.hideBanner(), ms);
+    if (ms > 0) this.bannerTimer = window.setTimeout(() => this.hideBanner(), ms);
   }
 
+  /** 말풍선을 닫으면 힌트 강조도 같이 끈다 */
   private hideBanner(): void {
     clearTimeout(this.bannerTimer);
     this.banner.classList.remove('show');
+    this.clearHighlights();
   }
 
   private showDeduction(d: Deduction): void {
@@ -648,12 +655,10 @@ export class GameView {
     const targets = [...(d.place !== undefined ? [d.place] : []), ...d.eliminate, ...(d.unmark ?? [])];
     for (const c of d.focus) if (!targets.includes(c)) this.cells[c].classList.add('focus');
     for (const c of targets) this.cells[c].classList.add('target');
-    this.highlightTimer = window.setTimeout(() => this.clearHighlights(), 3600);
     this.showMessage(d.message);
   }
 
   private clearHighlights(): void {
-    clearTimeout(this.highlightTimer);
     for (const c of this.cells) c.classList.remove('focus', 'target');
   }
 
@@ -678,7 +683,7 @@ export class GameView {
     runner.style.transition = 'transform .12s linear';
     this.sound.squeak();
     const label = run.line === 'row' ? `${run.index + 1}행` : `${run.index + 1}열`;
-    this.showMessage(`쥐가 ${label}을 달리며 고양이가 없는 칸을 X 로 표시해요!`, 3200);
+    this.showMessage(`쥐가 ${label}을 달리며 고양이가 없는 칸을 X 로 표시해요!`, { icon: 'art-mouse', ms: 3200 });
     let k = 0;
     const timer = window.setInterval(() => {
       if (this.destroyed) return clearInterval(timer);
@@ -751,7 +756,6 @@ export class GameView {
     this.intervals.forEach((t) => clearInterval(t));
     clearTimeout(this.saveTimer);
     clearTimeout(this.bannerTimer);
-    clearTimeout(this.highlightTimer);
     cancelAnimationFrame(this.scoreRaf);
     this.root.remove();
   }
