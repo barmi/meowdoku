@@ -69,7 +69,7 @@ export class App {
     }
     const puzzle = levelPuzzle(level);
     const saved = this.save.progress.level;
-    this.mount(new GameView(this, 'level', puzzle, level, saved?.id === puzzle.id ? saved : null));
+    this.mount(new GameView(this, 'level', puzzle, level, saved?.sig === puzzle.sig ? saved : null));
     this.persist();
     if (!this.save.seenHelp) {
       this.save.seenHelp = true;
@@ -81,7 +81,7 @@ export class App {
   playDaily(): void {
     const puzzle = dailyPuzzle(todayKey());
     const saved = this.save.progress.daily;
-    this.mount(new GameView(this, 'daily', puzzle, 0, saved?.id === puzzle.id ? saved : null));
+    this.mount(new GameView(this, 'daily', puzzle, 0, saved?.sig === puzzle.sig ? saved : null));
   }
 
   goHome(): void {

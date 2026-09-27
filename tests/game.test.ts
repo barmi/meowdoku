@@ -12,11 +12,21 @@ function record(game: Game): GameEvent[] {
 }
 
 describe('Game', () => {
-  it('시작하면 스크린샷처럼 3행 4열에 고양이가 있고 물고기는 3마리', () => {
+  it('레벨 701 은 오픈 없이도 해가 하나라 빈 판으로 시작하고 물고기는 3마리', () => {
     const g = new Game(P701());
-    expect(g.marks[cell(2, 3)]).toBe(CAT);
-    expect(g.catCount()).toBe(1);
+    expect(g.catCount()).toBe(0);
     expect(g.fish).toBe(MAX_FISH);
+  });
+
+  it('오픈이 있는 판은 그 고양이가 놓인 채로 시작하고, 처음부터 다시 해도 남는다', () => {
+    const p = { ...levelPuzzle(701), givens: [cell(4, 5)] };
+    const g = new Game(p);
+    expect(g.catCount()).toBe(1);
+    expect(g.marks[cell(4, 5)]).toBe(CAT);
+    g.placeCat(cell(0, 2), 'user');
+    g.restart();
+    expect(g.catCount()).toBe(1);
+    expect(g.marks[cell(4, 5)]).toBe(CAT);
   });
 
   it('탭: 빈 칸 → X → 고양이(정답이면 고정, 점수)', () => {
@@ -49,6 +59,7 @@ describe('Game', () => {
 
   it('드래그: X 칠하기와 지우기, 고양이 칸은 그대로', () => {
     const g = new Game(P701());
+    g.placeCat(cell(2, 3), 'user');
     const row = [...Array(8).keys()].map((c) => cell(2, c));
     g.paint(row, 'x');
     expect(row.filter((c) => g.marks[c] === X)).toHaveLength(7);
@@ -117,5 +128,7 @@ describe('Game', () => {
     expect(Array.from(h.marks)).toEqual(Array.from(g.marks));
     expect(h.fish).toBe(2);
     expect(new Game(levelPuzzle(702), saved).fish).toBe(MAX_FISH);
+    // 같은 레벨이라도 판(sig)이 바뀐 예전 저장본은 버린다
+    expect(new Game(p, { ...saved, sig: 'old' }).fish).toBe(MAX_FISH);
   });
 });

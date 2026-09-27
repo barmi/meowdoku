@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { generate } from '../src/core/generator';
+import { generate, givenOptions, growRegions, randomSolution } from '../src/core/generator';
 import { Geometry, neighbors4 } from '../src/core/geometry';
 import { dailyPuzzle, levelPuzzle, sizeForLevel } from '../src/core/levels';
 import { LogicEngine, TECH } from '../src/core/logic';
 import { rngFor } from '../src/core/rng';
 import { findSolutions } from '../src/core/solver';
-import { emptyState, stateFromMarks } from '../src/core/state';
+import { emptyState, placeCat, stateFromMarks } from '../src/core/state';
 import type { Puzzle } from '../src/core/types';
 
 function isValidSolution(n: number, regions: number[], sol: number[]): boolean {
@@ -41,6 +41,7 @@ function logicAgreesWithSolution(p: Puzzle): boolean {
   const g = new Geometry(p.size, p.regions);
   const engine = new LogicEngine(g);
   const s = emptyState(g);
+  for (const c of p.givens) placeCat(g, s, c);
   const solCells = new Set(p.solution.map((c, r) => r * p.size + c));
   while (s.placed < p.size) {
     const d = engine.next(s);
@@ -59,8 +60,17 @@ function checkPuzzle(p: Puzzle): void {
   expect(new Set(p.colors).size).toBe(n);
   expect(regionsConnected(n, p.regions)).toBe(true);
   expect(isValidSolution(n, p.regions, p.solution)).toBe(true);
-  const sols = findSolutions(new Geometry(n, p.regions), 2);
-  expect(sols).toEqual([p.solution]);
+  // 오픈은 필요할 때만: 없으면 그대로 해가 하나, 있으면(1마리) 오픈 없이는 해가 여럿이고 오픈하면 하나
+  const g = new Geometry(n, p.regions);
+  expect(p.givens.length).toBeLessThanOrEqual(1);
+  if (p.givens.length === 0) {
+    expect(findSolutions(g, 2)).toEqual([p.solution]);
+  } else {
+    expect(findSolutions(g, 2)).toHaveLength(2);
+    const s = emptyState(g);
+    for (const gv of p.givens) placeCat(g, s, gv);
+    expect(findSolutions(g, 2, s)).toEqual([p.solution]);
+  }
   for (const gv of p.givens) expect(p.solution[Math.floor(gv / n)]).toBe(gv % n);
   expect(Number.isFinite(p.tech)).toBe(true);
   expect(logicAgreesWithSolution(p)).toBe(true);
@@ -72,7 +82,8 @@ describe('스크린샷 퍼즐', () => {
     expect(p.size).toBe(8);
     // 1-based: (1,3) (2,1) (3,4) (4,2) (5,6) (6,8) (7,5) (8,7)
     expect(p.solution).toEqual([2, 0, 3, 1, 5, 7, 4, 6]);
-    expect(p.givens).toEqual([2 * 8 + 3]);
+    // 원본은 3행 4열을 열어 두지만, 오픈 없이도 해가 하나라서 열지 않는다
+    expect(p.givens).toEqual([]);
     checkPuzzle(p);
   });
 
@@ -80,6 +91,7 @@ describe('스크린샷 퍼즐', () => {
     const p = levelPuzzle(702);
     expect(p.size).toBe(9);
     expect(p.solution).toEqual([4, 7, 5, 3, 1, 6, 2, 0, 8]);
+    expect(p.givens).toEqual([]);
     checkPuzzle(p);
   });
 });
@@ -89,7 +101,7 @@ describe('생성기', () => {
     it(`${size}×${size} 퍼즐은 규칙에 맞고 유일해이며 논리로 풀린다`, () => {
       for (let seed = 0; seed < (size >= 9 ? 4 : 8); seed++) {
         const gen = generate(rngFor(`test:${size}:${seed}`), { size, maxTech: TECH.contradiction });
-        checkPuzzle({ id: 't', size, ...gen });
+        checkPuzzle({ id: 't', size, ...gen, sig: '' });
       }
     });
   }
@@ -109,9 +121,45 @@ describe('생성기', () => {
     expect(sizeForLevel(702)).toBe(9);
   });
 
+  it('생성된 레벨은 오픈 없이도 해가 하나라서 아무것도 열지 않는다', () => {
+    for (let level = 1; level <= 40; level++) expect(levelPuzzle(level).givens).toEqual([]);
+  });
+
   it('여러 레벨과 오늘의 퍼즐이 만들어진다', () => {
     for (const level of [1, 2, 10, 11, 31, 101, 401, 1003]) checkPuzzle(levelPuzzle(level));
     checkPuzzle(dailyPuzzle('2026-09-27'));
+  });
+});
+
+/** 영역만 키우고 경계를 고치지 않은, 해가 여러 개인 판 */
+function ambiguousBoard(): { n: number; regions: number[]; solution: number[] } {
+  for (let seed = 0; ; seed++) {
+    const rng = rngFor(`ambiguous:${seed}`);
+    const n = 7;
+    const solution = randomSolution(rng, n);
+    const regions = growRegions(rng, n, solution);
+    const g = new Geometry(n, regions);
+    if (findSolutions(g, 2).length === 2 && givenOptions(g, solution)) return { n, regions, solution };
+  }
+}
+
+describe('오픈(처음부터 놓인 고양이)', () => {
+  it('해가 하나인 판은 오픈하지 않는다', () => {
+    const p = levelPuzzle(701);
+    expect(givenOptions(new Geometry(p.size, p.regions), p.solution)).toEqual([[]]);
+  });
+
+  it('해가 여러 개인 판은 1마리만 열면 유일해가 되는 정답 칸을 고른다', () => {
+    const { n, regions, solution } = ambiguousBoard();
+    const g = new Geometry(n, regions);
+    const options = givenOptions(g, solution)!;
+    expect(options.length).toBeGreaterThan(0);
+    for (const [cell] of options) {
+      expect(solution[Math.floor(cell / n)]).toBe(cell % n);
+      const s = emptyState(g);
+      placeCat(g, s, cell);
+      expect(findSolutions(g, 2, s)).toEqual([solution]);
+    }
   });
 });
 

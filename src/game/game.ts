@@ -16,6 +16,8 @@ export type Status = 'playing' | 'won' | 'lost';
 /** 저장용 진행 상태 */
 export interface Progress {
   id: string;
+  /** Puzzle.sig — 같은 레벨이라도 판이 바뀌었으면 복원하지 않는다 */
+  sig?: string;
   marks: string;
   fish: number;
   score: number;
@@ -87,7 +89,7 @@ export class Game {
     this.marks = new Uint8Array(this.n * this.n);
     this.solutionCells = new Set(puzzle.solution.map((c, r) => r * this.n + c));
     this.regionCells = Array.from({ length: this.n }, (_, k) => this.geom.unitCells[2 * this.n + k]);
-    if (saved && saved.id === puzzle.id && saved.marks.length === this.marks.length) {
+    if (saved && saved.id === puzzle.id && saved.sig === puzzle.sig && saved.marks.length === this.marks.length) {
       for (let i = 0; i < this.marks.length; i++) this.marks[i] = Number(saved.marks[i]) as 0 | 1 | 2;
       this.fish = saved.fish;
       this.score = saved.score;
@@ -138,6 +140,7 @@ export class Game {
   toProgress(): Progress {
     return {
       id: this.puzzle.id,
+      sig: this.puzzle.sig,
       marks: Array.from(this.marks).join(''),
       fish: this.fish,
       score: this.score,

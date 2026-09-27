@@ -3,15 +3,22 @@ import { LogicEngine } from './logic';
 import { COLOR_ORDER, SIMILAR } from './palette';
 import { type Rng, shuffle } from './rng';
 import { findSolutions } from './solver';
+import { emptyState, placeCat } from './state';
 import type { ColorKey } from './types';
 
 /**
  * 퍼즐 생성
  * 1) 규칙을 지키는 고양이 배치(정답)를 먼저 뽑는다.
  * 2) 고양이 칸을 씨앗으로 영역을 무작위로 키운다.
- * 3) 해가 여러 개면, 다른 해에만 있는 고양이 칸을 이웃 영역으로 넘겨 그 해를 깨뜨린다.
- *    (정답 칸은 건드리지 않으므로 정답은 그대로 유효하다) — 유일해가 될 때까지 반복.
+ * 3) 해가 여러 개면, 다른 해에만 있는 고양이 칸을 이웃 영역으로 넘겨 그 해를 깨뜨린다
+ *    (정답 칸은 건드리지 않으므로 정답은 그대로 유효하다) — 오픈 없이 유일해가 될 때까지 반복.
+ *    막히면 판을 새로 만든다.
  * 4) 논리 엔진으로 "찍지 않고" 풀리는지, 난이도가 맞는지 확인한다.
+ *
+ * 오픈(처음부터 놓인 고양이): 원본 게임이 정답 하나를 열어 두는 건 문제에 경우의 수가 있어서
+ * 부득이 연 것이다. 여기서는 오픈 없이 해가 하나인 판을 만들 수 있으니 열지 않는다.
+ * 1마리 오픈은 그런 판을 끝내 못 만들 때만 쓰는 안전장치이고, 영역을 바꿀 수 없는 스크린샷
+ * 판(handcrafted)도 같은 규칙(givenOptions)으로 판단한다.
  */
 export interface GenOptions {
   size: number;
@@ -114,29 +121,48 @@ function connectedWithout(n: number, reg: number[], region: number, removed: num
   return seen.size === total;
 }
 
-/** 해가 하나가 될 때까지 다른 해의 고양이 칸을 이웃 영역으로 넘긴다. 실패하면 false. */
+/**
+ * 오픈 후보: 오픈 없이 해가 하나면 [[]] (열 필요 없음), 여러 개면 한 마리만 열어도 유일해가 되는
+ * 정답 칸들 [[a], [b], …] (prefer 를 앞에), 한 마리로 안 되면 null.
+ */
+export function givenOptions(g: Geometry, sol: number[], prefer: number[] = []): number[][] | null {
+  if (findSolutions(g, 2).length === 1) return [[]];
+  const n = g.n;
+  const cells = sol.map((c, r) => r * n + c);
+  const order = [...prefer.filter((c) => cells.includes(c)), ...cells.filter((c) => !prefer.includes(c))];
+  const out: number[][] = [];
+  for (const cell of order) {
+    const s = emptyState(g);
+    placeCat(g, s, cell);
+    if (findSolutions(g, 2, s).length === 1) out.push([cell]);
+  }
+  return out.length ? out : null;
+}
+
+/** 다른 해 alt 에만 있는 고양이 칸 하나를 이웃 영역으로 넘겨 alt 를 깨뜨린다. 못 하면 false. */
+function breakAlternative(rng: Rng, n: number, reg: number[], sol: number[], alt: number[]): boolean {
+  const cells = shuffle(
+    rng,
+    alt.flatMap((c, r) => (c !== sol[r] ? [r * n + c] : [])),
+  );
+  for (const cell of cells) {
+    const a = reg[cell];
+    if (!connectedWithout(n, reg, a, cell, a * n + sol[a])) continue;
+    const nbs = neighbors4(n, cell).filter((j) => reg[j] !== a);
+    if (!nbs.length) continue;
+    reg[cell] = reg[shuffle(rng, nbs)[0]];
+    return true;
+  }
+  return false;
+}
+
+/** 오픈 없이 해가 하나가 될 때까지 다른 해의 고양이 칸을 이웃 영역으로 넘긴다(reg 를 직접 바꾼다). */
 export function makeUnique(rng: Rng, n: number, reg: number[], sol: number[], maxIter = 120): boolean {
   for (let iter = 0; iter < maxIter; iter++) {
     const sols = findSolutions(new Geometry(n, reg), 2);
     if (sols.length === 1) return true;
     const alt = sols.find((s) => s.some((c, r) => c !== sol[r]));
-    if (!alt) return false;
-    const cells = shuffle(
-      rng,
-      alt.flatMap((c, r) => (c !== sol[r] ? [r * n + c] : [])),
-    );
-    let moved = false;
-    for (const cell of cells) {
-      const a = reg[cell];
-      const seed = a * n + sol[a];
-      if (!connectedWithout(n, reg, a, cell, seed)) continue;
-      const nbs = neighbors4(n, cell).filter((j) => reg[j] !== a);
-      if (!nbs.length) continue;
-      reg[cell] = reg[shuffle(rng, nbs)[0]];
-      moved = true;
-      break;
-    }
-    if (!moved) return false;
+    if (!alt || !breakAlternative(rng, n, reg, sol, alt)) return false;
   }
   return false;
 }
@@ -167,30 +193,42 @@ export function assignColors(rng: Rng, n: number, reg: number[]): ColorKey[] {
   return colors;
 }
 
+type Candidate = { reg: number[]; sol: number[]; givens: number[]; tech: number };
+
 export function generate(rng: Rng, opts: GenOptions): Generated {
   const n = opts.size;
   const minTech = opts.minTech ?? 0;
-  let best: { reg: number[]; sol: number[]; tech: number } | null = null;
+  let best: Candidate | null = null;
+  // 오픈 1마리가 필요한 판 — 오픈 없이 해가 하나인 판을 끝내 못 만들 때만 쓰는 안전장치
+  let fallback: Candidate | null = null;
   for (let attempt = 0; attempt < 400; attempt++) {
     const sol = randomSolution(rng, n);
     const reg = growRegions(rng, n, sol);
-    if (!makeUnique(rng, n, reg, sol)) continue;
+    const unique = makeUnique(rng, n, reg, sol);
+    if (!unique && fallback) continue;
     // 한 칸짜리 영역은 공짜 고양이라서 큰 판에만 하나까지, 너무 큰 영역도 거른다
     const sizes = regionSizes(n, reg);
     if (sizes.filter((s) => s === 1).length > (n >= 8 ? 1 : 0)) continue;
     if (Math.max(...sizes) > Math.ceil(2.3 * n)) continue;
-    const tech = new LogicEngine(new Geometry(n, reg)).grade(opts.maxTech);
+    const g = new Geometry(n, reg);
+    const engine = new LogicEngine(g);
+    if (!unique) {
+      for (const givens of shuffle(rng, givenOptions(g, sol) ?? [])) {
+        const tech = engine.grade(opts.maxTech, givens);
+        if (Number.isFinite(tech)) {
+          fallback = { reg, sol, givens, tech };
+          break;
+        }
+      }
+      continue;
+    }
+    const tech = engine.grade(opts.maxTech);
     if (!Number.isFinite(tech)) continue;
-    if (!best || tech > best.tech) best = { reg, sol, tech };
+    if (!best || tech > best.tech) best = { reg, sol, givens: [], tech };
     if (tech >= minTech || attempt >= 60) break;
   }
-  if (!best) throw new Error(`failed to generate a ${n}x${n} puzzle`);
-  const { reg, sol, tech } = best;
-
-  // 처음부터 놓아 줄 고양이 한 마리 — 세 칸 이상인 영역에서 고른다
-  const sizes = regionSizes(n, reg);
-  const pool = sol.map((c, r) => r * n + c).filter((cell) => sizes[reg[cell]] >= 3);
-  const givens = [shuffle(rng, pool.length ? pool : sol.map((c, r) => r * n + c))[0]];
-
+  const pick = best ?? fallback;
+  if (!pick) throw new Error(`failed to generate a ${n}x${n} puzzle`);
+  const { reg, sol, givens, tech } = pick;
   return { regions: reg, solution: sol, colors: assignColors(rng, n, reg), givens, tech };
 }

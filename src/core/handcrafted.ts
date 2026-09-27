@@ -1,14 +1,16 @@
 import type { ColorKey } from './types';
 
 /**
- * 원본 스크린샷에서 그대로 옮긴 퍼즐. 둘 다 유일해가 있다(테스트로 확인).
- * - 701: IMG_4711/4712 의 8×8 (시작할 때 3행 4열 고양이가 놓여 있음)
- * - 702: IMG_4709 의 9×9 (3행 6열 고양이)
+ * 원본 스크린샷에서 그대로 옮긴 퍼즐.
+ * - 701: IMG_4711/4712 의 8×8 (원본은 3행 4열 고양이가 열린 채 시작)
+ * - 702: IMG_4709 의 9×9 (원본은 3행 6열 고양이가 열려 있음)
+ * 두 판 모두 오픈 없이도 해가 하나라서(테스트로 확인) 규칙대로 아무것도 열지 않고 시작한다.
+ * opened 는 오픈이 필요할 때 먼저 써 볼 후보로만 남겨 둔다.
  */
 export interface Handcrafted {
   grid: ColorKey[][];
-  /** [행, 열] 0부터 */
-  given: [number, number];
+  /** 원본 스크린샷에서 열려 있던 고양이 [행, 열] (0부터) */
+  opened: [number, number];
 }
 
 const parse = (text: string): ColorKey[][] =>
@@ -29,7 +31,7 @@ export const HANDCRAFTED: Record<number, Handcrafted> = {
       yellow yellow yellow yellow purple orange orange  orange
       purple purple purple purple purple purple mustard orange
     `),
-    given: [2, 3],
+    opened: [2, 3],
   },
   702: {
     grid: parse(`
@@ -43,6 +45,6 @@ export const HANDCRAFTED: Record<number, Handcrafted> = {
       orange    green     green     green     green  green  brown  brown  brown
       orange    orange    orange    orange    orange orange brown  brown  mustard
     `),
-    given: [2, 5],
+    opened: [2, 5],
   },
 };

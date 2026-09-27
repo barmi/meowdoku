@@ -21,8 +21,10 @@ export interface Puzzle {
   colors: ColorKey[];
   /** 행 → 고양이가 있는 열 (유일해) */
   solution: number[];
-  /** 처음부터 놓여 있는 고양이 칸 */
+  /** 처음부터 열려 있는 고양이 칸 — 오픈 없이 해가 여러 개일 때만 1마리, 아니면 없음 */
   givens: number[];
-  /** 논리로 풀 때 필요한 최고 기법 단계 (logic.ts 의 Tech) */
+  /** 논리로 풀 때 필요한 최고 기법 단계 (logic.ts 의 TECH) */
   tech: number;
+  /** 판 모양 지문 — 생성 규칙이 바뀌어 같은 레벨의 판이 달라지면 예전 진행 저장본을 버린다 */
+  sig: string;
 }

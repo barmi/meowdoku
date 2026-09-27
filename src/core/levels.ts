@@ -1,10 +1,14 @@
-import { generate } from './generator';
+import { generate, givenOptions } from './generator';
 import { Geometry } from './geometry';
 import { HANDCRAFTED } from './handcrafted';
 import { LogicEngine, TECH } from './logic';
-import { rngFor } from './rng';
+import { hashSeed, rngFor } from './rng';
 import { findSolutions } from './solver';
+import { emptyState, placeCat } from './state';
 import type { ColorKey, Puzzle } from './types';
+
+const signature = (size: number, regions: number[], givens: number[]) =>
+  hashSeed(`${size}|${regions.join(',')}|${givens.join(',')}`).toString(36);
 
 /** 레벨이 오를수록 판이 커진다. 701 은 스크린샷처럼 8×8, 702 는 9×9. */
 export function sizeForLevel(level: number): number {
@@ -37,16 +41,25 @@ function fromHandcrafted(id: string, level: number): Puzzle {
     }
   }
   const g = new Geometry(n, regions);
-  const sols = findSolutions(g, 2);
+  // 정답은 스크린샷에서 열려 있던 고양이를 넣고 구한다 (그 칸은 반드시 정답이다)
+  const opened = h.opened[0] * n + h.opened[1];
+  const withOpened = emptyState(g);
+  placeCat(g, withOpened, opened);
+  const sols = findSolutions(g, 2, withOpened);
   if (sols.length !== 1) throw new Error(`handcrafted level ${level} is not unique`);
+  const solution = sols[0];
+  const options = givenOptions(g, solution, [opened]);
+  if (!options) throw new Error(`handcrafted level ${level} needs more than one opened cat`);
+  const givens = options[0];
   return {
     id,
     size: n,
     regions,
     colors,
-    solution: sols[0],
-    givens: [h.given[0] * n + h.given[1]],
-    tech: new LogicEngine(g).grade(),
+    solution,
+    givens,
+    tech: new LogicEngine(g).grade(TECH.contradiction, givens),
+    sig: signature(n, regions, givens),
   };
 }
 
@@ -60,7 +73,7 @@ export function levelPuzzle(level: number): Puzzle {
   } else {
     const size = sizeForLevel(level);
     const gen = generate(rngFor(`meowdoku:level:${level}`), { size, ...difficulty(size) });
-    puzzle = { id, size, ...gen };
+    puzzle = { id, size, ...gen, sig: signature(size, gen.regions, gen.givens) };
   }
   cache.set(id, puzzle);
   return puzzle;
@@ -73,7 +86,7 @@ export function dailyPuzzle(dateKey: string): Puzzle {
   if (hit) return hit;
   const size = 9;
   const gen = generate(rngFor(`meowdoku:daily:${dateKey}`), { size, maxTech: TECH.contradiction, minTech: TECH.subset });
-  const puzzle = { id, size, ...gen };
+  const puzzle = { id, size, ...gen, sig: signature(size, gen.regions, gen.givens) };
   cache.set(id, puzzle);
   return puzzle;
 }

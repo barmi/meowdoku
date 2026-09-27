@@ -78,9 +78,10 @@ export class LogicEngine {
     for (const e of d.eliminate) eliminate(this.g, s, e);
   }
 
-  /** 빈 판에서 논리만으로 풀어 본다. 풀리면 쓰인 최고 기법 단계, 막히면 Infinity. */
-  grade(maxTech: number = TECH.contradiction): number {
+  /** 빈 판(+ 처음부터 열린 고양이)에서 논리만으로 풀어 본다. 풀리면 쓰인 최고 기법 단계, 막히면 Infinity. */
+  grade(maxTech: number = TECH.contradiction, givens: readonly number[] = []): number {
     const s = emptyState(this.g);
+    for (const cell of givens) placeCat(this.g, s, cell);
     let used = 0;
     for (let guard = 0; guard < 2000 && s.placed < this.g.n; guard++) {
       const d = this.next(s, maxTech, true);
