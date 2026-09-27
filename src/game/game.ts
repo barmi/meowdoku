@@ -10,6 +10,11 @@ export const CAT = 2;
 /** 틀린 고양이 자리 — 빨간 X 로 남고 지워지지 않는다 (#8) */
 export const WRONG = 3;
 
+/** 생각 정리용 마커 (#10) — 판정·힌트·통계와 무관하다. 0 없음 */
+export const NOTE_NONE = 0;
+export type NoteShape = 1 | 2 | 3;
+export const NOTE_NAMES: Record<NoteShape, string> = { 1: '세모', 2: '동그라미', 3: '네모' };
+
 export const MAX_FISH = 3;
 
 export function newGameId(): string {
@@ -29,6 +34,8 @@ export interface Progress {
   /** Puzzle.sig — 같은 레벨이라도 판이 바뀌었으면 복원하지 않는다 */
   sig?: string;
   marks: string;
+  /** 마커 (칸마다 0~3), 하나도 없으면 생략 */
+  notes?: string;
   fish: number;
   score: number;
   combo: number;
@@ -51,6 +58,7 @@ export interface WinSummary {
 
 export type GameEvent =
   | { type: 'marks'; cells: number[] }
+  | { type: 'notes'; cells: number[] }
   | { type: 'cat'; cell: number; source: CatSource; points: number }
   | { type: 'wrong'; cell: number }
   | { type: 'fish'; fish: number; delta: number }
@@ -75,6 +83,8 @@ export class Game {
   readonly geom: Geometry;
   readonly logic: LogicEngine;
   readonly marks: Uint8Array;
+  /** 마커 층 — marks 와 따로 두고 빈 칸에만 보인다 */
+  readonly notes: Uint8Array;
   readonly regionCells: number[][];
   private readonly solutionCells: Set<number>;
   private readonly listeners = new Set<(e: GameEvent) => void>();
@@ -99,6 +109,7 @@ export class Game {
     this.geom = new Geometry(this.n, puzzle.regions);
     this.logic = new LogicEngine(this.geom, (r) => PALETTE[puzzle.colors[r]].name);
     this.marks = new Uint8Array(this.n * this.n);
+    this.notes = new Uint8Array(this.n * this.n);
     this.solutionCells = new Set(puzzle.solution.map((c, r) => r * this.n + c));
     this.regionCells = Array.from({ length: this.n }, (_, k) => this.geom.unitCells[2 * this.n + k]);
     if (saved && saved.id === puzzle.id && saved.sig === puzzle.sig && saved.marks.length === this.marks.length) {
@@ -112,6 +123,9 @@ export class Game {
       this.continued = saved.continued;
       this.status = saved.status;
       this.gameId = saved.gameId ?? this.gameId;
+      if (saved.notes?.length === this.notes.length) {
+        for (let i = 0; i < this.notes.length; i++) this.notes[i] = Math.min(3, Number(saved.notes[i]) || 0);
+      }
       // 예전 저장본에 틀린 고양이가 남아 있으면 안전하게 빨간 X 로
       for (let i = 0; i < this.marks.length; i++) {
         if (this.marks[i] === CAT && !this.solutionCells.has(i)) this.marks[i] = WRONG;
@@ -133,6 +147,7 @@ export class Game {
   reset(): void {
     this.gameId = newGameId();
     this.marks.fill(EMPTY);
+    this.notes.fill(NOTE_NONE);
     for (const g of this.puzzle.givens) this.marks[g] = CAT;
     this.fish = MAX_FISH;
     this.score = 0;
@@ -147,6 +162,7 @@ export class Game {
   restart(): void {
     this.reset();
     this.emit({ type: 'marks', cells: [...this.marks.keys()] });
+    this.emit({ type: 'notes', cells: [...this.notes.keys()] });
     this.emit({ type: 'fish', fish: this.fish, delta: 0 });
     this.emit({ type: 'score', score: this.score });
   }
@@ -157,6 +173,7 @@ export class Game {
       gameId: this.gameId,
       sig: this.puzzle.sig,
       marks: Array.from(this.marks).join(''),
+      ...(this.notes.some((v) => v) ? { notes: Array.from(this.notes).join('') } : {}),
       fish: this.fish,
       score: this.score,
       combo: this.combo,
@@ -214,6 +231,29 @@ export class Game {
       cells.filter((c) => this.marks[c] === from),
       to,
     );
+  }
+
+  /**
+   * 마커를 놓거나(shape 1~3) 지운다(0). 놓기는 빈 칸에만 — X·고양이가 있는 칸은 건너뛴다.
+   * 정답·힌트·점수와는 상관없는 생각 정리용이다 (#10).
+   */
+  setNote(cells: number[], shape: number): number[] {
+    if (this.status !== 'playing') return [];
+    const changed = cells.filter(
+      (c) => this.notes[c] !== shape && (shape === NOTE_NONE || this.marks[c] === EMPTY),
+    );
+    for (const c of changed) this.notes[c] = shape;
+    if (changed.length) this.emit({ type: 'notes', cells: changed });
+    return changed;
+  }
+
+  /** 마커 전체 지우기 — 지운 개수 */
+  clearNotes(): number {
+    const cells: number[] = [];
+    this.notes.forEach((v, i) => v && cells.push(i));
+    this.notes.fill(NOTE_NONE);
+    if (cells.length) this.emit({ type: 'notes', cells });
+    return cells.length;
   }
 
   /** X 만 지운다 (키보드 Delete) */

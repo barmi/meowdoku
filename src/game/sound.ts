@@ -65,6 +65,12 @@ export class Sound {
     this.buzz(8);
   }
 
+  /** 마커 — X 보다 부드러운 소리 */
+  note(): void {
+    this.tone(660, 0.06, { gain: 0.06 });
+    this.buzz(6);
+  }
+
   erase(): void {
     this.tone(520, 0.05, { type: 'triangle', gain: 0.06 });
   }

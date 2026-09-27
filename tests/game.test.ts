@@ -77,6 +77,31 @@ describe('Game', () => {
     expect(restored.marks[c]).toBe(WRONG);
   });
 
+  it('마커: 빈 칸에만 놓이고 지우개·전체 지우기, 판정과 무관, 저장·복원, 처음부터 하면 사라짐 (#10)', () => {
+    const p = P701();
+    const g = new Game(p);
+    const [a, b, c] = [cell(0, 0), cell(0, 1), cell(0, 2)];
+    g.tap(b); // X
+    expect(g.setNote([a, b], 1)).toEqual([a]); // X 칸에는 안 놓인다
+    expect(g.setNote([c], 2)).toEqual([c]);
+    expect(g.setNote([c], 2)).toEqual([]); // 같은 마커는 그대로
+    expect(Array.from(g.notes.slice(0, 3))).toEqual([1, 0, 2]);
+    // 판정과 무관: 마커 칸에 고양이를 놓아도 정답이면 고양이
+    expect(g.placeCat(c, 'user')).toBe(true);
+    expect(g.fish).toBe(MAX_FISH);
+    // 저장·복원
+    const h = new Game(p, JSON.parse(JSON.stringify(g.toProgress())));
+    expect(h.notes[a]).toBe(1);
+    expect(h.setNote([a], 0)).toEqual([a]); // 지우개
+    expect(h.setNote([cell(1, 1)], 3)).toEqual([cell(1, 1)]);
+    expect(h.clearNotes()).toBe(2); // c 의 동그라미(가려짐) + 네모
+    expect(h.notes.some((v) => v)).toBe(false);
+    expect(h.toProgress().notes).toBeUndefined();
+    h.setNote([cell(5, 5)], 1);
+    h.restart();
+    expect(h.notes.some((v) => v)).toBe(false);
+  });
+
   it('드래그: X 칠하기와 지우기, 고양이 칸은 그대로', () => {
     const g = new Game(P701());
     g.placeCat(cell(2, 3), 'user');

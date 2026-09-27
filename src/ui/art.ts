@@ -183,6 +183,27 @@ function winkCat(id: string): string {
     <path d="M46 69.4Q50 79 54 69.4Q50 71.2 46 69.4Z" fill="#F28C9A"/>`;
 }
 
+/* ───────────── 생각 정리용 마커 (#10) ───────────── */
+
+/** 1 세모, 2 동그라미, 3 네모 */
+export const NOTE_SHAPES: Record<number, string> = {
+  1: '<path d="M50 19.5L81.5 73.5H18.5Z"/>',
+  2: '<circle cx="50" cy="50" r="28"/>',
+  3: '<rect x="23.5" y="23.5" width="53" height="53" rx="6"/>',
+};
+
+/** 어느 칸 색에서도 보이게: 어두운 반투명 테두리 위에 흰 선 */
+function noteShape(inner: string): string {
+  return `<g fill="none" stroke-linejoin="round" stroke-linecap="round">
+    <g stroke="rgba(60,30,20,.42)" stroke-width="12.5">${inner}</g>
+    <g stroke="#fff" stroke-width="7">${inner}</g>
+  </g>`;
+}
+
+/** 마커 도구 버튼 아이콘 (글자색으로) */
+export const noteToolIcon = (k: number): string =>
+  `<svg viewBox="0 0 100 100" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="9" stroke-linejoin="round">${NOTE_SHAPES[k]}</g></svg>`;
+
 /* ───────────── 톱니 (6갈래 꽃 모양) ───────────── */
 
 function gearPath(): string {
@@ -232,6 +253,15 @@ export function spriteMarkup(): string {
       <rect x="39" y="15.5" width="22" height="69" rx="7.5" transform="rotate(45 50 50)"/>
       <rect x="39" y="15.5" width="22" height="69" rx="7.5" transform="rotate(-45 50 50)"/>
     </g>
+  </symbol>
+  ${[1, 2, 3].map((k) => `<symbol id="note-${k}" viewBox="0 0 100 100">${noteShape(NOTE_SHAPES[k])}</symbol>`).join('')}
+  <symbol id="ico-eraser" viewBox="0 0 100 100">
+    <g transform="rotate(-40 50 50)">
+      <rect x="22" y="33" width="56" height="34" rx="8" fill="none" stroke="currentColor" stroke-width="8"/>
+      <path d="M45 33V67" stroke="currentColor" stroke-width="8"/>
+      <rect x="22" y="33" width="23" height="34" rx="8" fill="currentColor" opacity=".35"/>
+    </g>
+    <path d="M30 86H74" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
   </symbol>
   <symbol id="cat-static" viewBox="0 0 100 100">${catBase('sc')}${openEye('sc', 'L', false)}${openEye('sc', 'R', false)}${MOUTH}</symbol>
   <symbol id="cat-wink" viewBox="0 0 100 100">${winkCat('wk')}</symbol>

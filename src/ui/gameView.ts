@@ -1,11 +1,25 @@
 import type { Deduction } from '../core/logic';
 import { COLOR_ORDER, PALETTE } from '../core/palette';
 import type { Puzzle } from '../core/types';
-import { CAT, EMPTY, Game, type GameEvent, MAX_FISH, type MouseRun, type Progress, type WinSummary, WRONG, X } from '../game/game';
+import {
+  CAT,
+  EMPTY,
+  Game,
+  type GameEvent,
+  MAX_FISH,
+  type MouseRun,
+  NOTE_NAMES,
+  NOTE_NONE,
+  type NoteShape,
+  type Progress,
+  type WinSummary,
+  WRONG,
+  X,
+} from '../game/game';
 import type { Sound } from '../game/sound';
 import type { Stats } from '../game/stats';
 import type { ItemKey, SaveData } from '../game/storage';
-import { catFace, use } from './art';
+import { catFace, noteToolIcon, use } from './art';
 import { isSheetOpen, openSheet, toast } from './overlay';
 
 export interface GameHost {
@@ -87,9 +101,15 @@ export class GameView {
   private banner!: HTMLElement;
   private bannerTimer = 0;
   private cursor = -1;
-  private drag: { start: number; last: number; mode: 'x' | 'erase' | null } | null = null;
+  private drag: { start: number; last: number; mode: 'x' | 'erase' | 'note' | 'unnote' | null } | null = null;
   /** 더블탭 판단용 — 직전 탭의 칸·시각·그 전 표시 */
   private lastTap: { cell: number; at: number; prev: number } | null = null;
+  /** 규칙 카드 자리 — 규칙 / 마커 도구 (#10) */
+  private page: 'rules' | 'markers' = 'rules';
+  private track!: HTMLElement;
+  private swipe: { x: number; y: number } | null = null;
+  /** 고른 마커 도구: 1~3 모양, 0 지우개, null 이면 마커 모드 아님 */
+  private tool: number | null = null;
   private intervals: number[] = [];
   private shownScore = 0;
   private scoreRaf = 0;
@@ -142,6 +162,7 @@ export class GameView {
         const st = PALETTE[puzzle.colors[k]];
         return `<div class="cell" role="gridcell" data-i="${i}" style="--bg-c:${st.bg};--pat:${st.pat}">
           <svg viewBox="0 0 100 100"><use href="#pat-${st.pattern}"/></svg>
+          <svg class="nt" viewBox="0 0 100 100"><use href="#note-1"/></svg>
           <svg class="xm" viewBox="0 0 100 100"><use href="#mark-x"/></svg></div>`;
       })
       .join('');
@@ -162,7 +183,19 @@ export class GameView {
         <div class="pill fishes" aria-label="남은 물고기">${`<div class="fish">${use('art-fish')}</div>`.repeat(MAX_FISH)}</div>
       </div>
       <div class="rules-wrap">
-        <div class="rules">${RULES.map(([spec, text]) => `<div class="rule">${miniGrid(spec)}<span>${text}</span></div>`).join('')}</div>
+        <div class="pager" aria-label="규칙과 마커 도구 — 옆으로 밀어 넘기기">
+          <div class="track">
+            <div class="page rules" data-page="rules">${RULES.map(([spec, text]) => `<div class="rule">${miniGrid(spec)}<span>${text}</span></div>`).join('')}</div>
+            <div class="page markers" data-page="markers">
+              ${([1, 2, 3] as NoteShape[])
+                .map((k) => `<button class="tool" data-tool="${k}" aria-pressed="false">${noteToolIcon(k)}<span>${NOTE_NAMES[k]}</span></button>`)
+                .join('')}
+              <button class="tool" data-tool="0" aria-pressed="false"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#ico-eraser"/></svg><span>지우개</span></button>
+              <button class="clear-notes">전체<br>지우기</button>
+            </div>
+          </div>
+        </div>
+        <div class="dots"><button data-go="rules" class="on" aria-label="규칙"></button><button data-go="markers" aria-label="마커 도구"></button></div>
         <div class="banner" role="status" title="눌러서 닫기"><span class="ico">${use('art-bulb')}</span><div class="msg"></div><span class="close" aria-hidden="true">✕</span></div>
       </div>
       <div class="board-wrap">
@@ -174,6 +207,7 @@ export class GameView {
       ).join('')}</div>`;
 
     this.board = this.root.querySelector('.board')!;
+    this.track = this.root.querySelector('.track')!;
     this.cells = [...this.board.querySelectorAll<HTMLElement>('.cell')];
     this.scoreEl = this.root.querySelector('[data-score]')!;
     this.banner = this.root.querySelector('.banner')!;
@@ -194,6 +228,10 @@ export class GameView {
     el.classList.toggle('x', m === X || m === WRONG);
     el.classList.toggle('wx', m === WRONG);
     el.classList.toggle('cat', m === CAT);
+    // 마커는 빈 칸에만 보인다 (X·고양이가 놓이면 가려진다)
+    const note = this.game.notes[i];
+    el.classList.toggle('noted', note !== NOTE_NONE && m === EMPTY);
+    if (note !== NOTE_NONE) el.querySelector('.nt use')?.setAttribute('href', `#note-${note}`);
     const face = el.querySelector('.catface');
     if (m === CAT && !face) {
       el.insertAdjacentHTML('beforeend', catFace(anim));
@@ -263,6 +301,9 @@ export class GameView {
       case 'marks':
         for (const c of e.cells) this.updateCell(c);
         this.refreshHeads();
+        break;
+      case 'notes':
+        for (const c of e.cells) this.updateCell(c);
         break;
       case 'cat':
         if (e.source === 'user') this.host.stats.cat();
@@ -382,8 +423,26 @@ export class GameView {
     b.addEventListener('keydown', (e) => this.onKey(e));
     b.addEventListener('blur', () => this.setCursor(-1));
     this.banner.addEventListener('click', () => this.hideBanner());
+    // 규칙 카드: 가로로 밀면 규칙 ↔ 마커 도구 (손가락 방향으로 넘어간다)
+    const pager = this.root.querySelector<HTMLElement>('.pager')!;
+    pager.addEventListener('pointerdown', (e) => (this.swipe = { x: e.clientX, y: e.clientY }));
+    pager.addEventListener('pointercancel', () => (this.swipe = null));
+    pager.addEventListener('pointerup', (e) => {
+      const s = this.swipe;
+      this.swipe = null;
+      if (!s) return;
+      const dx = e.clientX - s.x;
+      const dy = e.clientY - s.y;
+      if (Math.abs(dx) > 36 && Math.abs(dx) > Math.abs(dy) * 1.3) this.flipPage(dx > 0 ? 'right' : 'left');
+    });
     this.root.addEventListener('click', (e) => {
-      const t = (e.target as HTMLElement).closest<HTMLElement>('[data-act],[data-item]');
+      const target = e.target as HTMLElement;
+      const go = target.closest<HTMLElement>('[data-go]')?.dataset.go;
+      if (go) return this.flipPage(go === 'markers' ? 'left' : 'right', go as 'rules' | 'markers');
+      const tool = target.closest<HTMLElement>('[data-tool]');
+      if (tool) return this.selectTool(Number(tool.dataset.tool));
+      if (target.closest('.clear-notes')) return this.clearNotes();
+      const t = target.closest<HTMLElement>('[data-act],[data-item]');
       if (!t) return;
       if (t.dataset.act === 'back') this.host.goHome();
       else if (t.dataset.act === 'settings') this.host.openSettings(this);
@@ -420,7 +479,7 @@ export class GameView {
     if (cell < 0 || cell === d.last) return;
     if (d.mode === null) {
       this.lastTap = null; // 드래그는 더블탭이 아니다
-      d.mode = this.game.marks[d.start] === X ? 'erase' : 'x';
+      d.mode = this.tool !== null ? this.noteMode(d.start) : this.game.marks[d.start] === X ? 'erase' : 'x';
       this.paint([d.start]);
     }
     this.paint(lineCells(this.game.n, d.last, cell));
@@ -431,12 +490,41 @@ export class GameView {
     const d = this.drag;
     if (!d) return;
     this.drag = null;
-    if (d.mode === null) this.tapCell(d.start);
+    if (d.mode !== null) return;
+    if (this.tool !== null) this.noteTap(d.start);
+    else this.tapCell(d.start);
+  }
+
+  /** 마커 모드에서 이 칸부터 쓸 때: 지우개거나 같은 마커가 있으면 지우기, 아니면 놓기 */
+  private noteMode(cell: number): 'note' | 'unnote' {
+    return this.tool === NOTE_NONE || this.game.notes[cell] === this.tool ? 'unnote' : 'note';
+  }
+
+  private noteTap(cell: number): void {
+    if (this.game.status !== 'playing') return;
+    const mode = this.noteMode(cell);
+    const changed = this.game.setNote([cell], mode === 'note' ? this.tool! : NOTE_NONE);
+    if (changed.length) {
+      this.touch();
+      if (mode === 'note') this.sound.note();
+      else this.sound.erase();
+    } else if (mode === 'note') {
+      this.replay(this.cells[cell], 'nope', 320); // X·고양이 칸에는 마커를 놓지 않는다
+    }
   }
 
   private paint(cells: number[]): void {
     const mode = this.drag?.mode;
     if (!mode) return;
+    if (mode === 'note' || mode === 'unnote') {
+      const changed = this.game.setNote(cells, mode === 'note' ? this.tool! : NOTE_NONE);
+      if (changed.length) {
+        this.touch();
+        if (mode === 'note') this.sound.note();
+        else this.sound.erase();
+      }
+      return;
+    }
     const changed = this.game.paint(cells, mode);
     if (changed.length) {
       this.touch();
@@ -489,6 +577,45 @@ export class GameView {
     void el.offsetWidth;
     el.classList.add(cls);
     setTimeout(() => el.classList.remove(cls), ms);
+  }
+
+  /* ───────── 마커 도구 (#10) ───────── */
+
+  /** dir 은 손가락이 민 방향 — 오른쪽으로 밀면 새 쪽이 왼쪽에서 들어온다 */
+  private flipPage(dir: 'left' | 'right', to?: 'rules' | 'markers'): void {
+    const next = to ?? (this.page === 'rules' ? 'markers' : 'rules');
+    if (next === this.page) return;
+    const cur = this.root.querySelector<HTMLElement>(`.page[data-page="${this.page}"]`)!;
+    const nxt = this.root.querySelector<HTMLElement>(`.page[data-page="${next}"]`)!;
+    const t = this.track;
+    t.classList.remove('anim');
+    cur.style.order = dir === 'right' ? '1' : '0';
+    nxt.style.order = dir === 'right' ? '0' : '1';
+    t.style.transform = dir === 'right' ? 'translateX(-50%)' : 'translateX(0)';
+    void t.offsetWidth;
+    t.classList.add('anim');
+    t.style.transform = dir === 'right' ? 'translateX(0)' : 'translateX(-50%)';
+    this.page = next;
+    for (const b of this.root.querySelectorAll<HTMLElement>('.dots [data-go]')) b.classList.toggle('on', b.dataset.go === next);
+    if (next === 'rules') this.selectTool(null);
+  }
+
+  /** 같은 도구를 다시 누르면 마커 모드 끝 */
+  private selectTool(tool: number | null): void {
+    this.tool = tool === this.tool ? null : tool;
+    for (const b of this.root.querySelectorAll<HTMLElement>('.tool')) {
+      const on = Number(b.dataset.tool) === this.tool;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+    }
+    this.board.parentElement?.classList.toggle('marking', this.tool !== null);
+    this.lastTap = null;
+  }
+
+  private clearNotes(): void {
+    const n = this.game.clearNotes();
+    toast(n ? `마커 ${n}개를 모두 지웠어요` : '지울 마커가 없어요');
+    if (n) this.sound.erase();
   }
 
   /** 틀린 고양이: 게임 화면 전체가 지진처럼 흔들리고 판 테두리가 빨갛게 번쩍인다 (#8) */
