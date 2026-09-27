@@ -1,10 +1,12 @@
 import { dailyPuzzle, difficultyOf, levelPuzzle, todayKey } from './core/levels';
 import type { WinSummary } from './game/game';
 import { Sound } from './game/sound';
+import { Stats } from './game/stats';
 import { type ItemKey, type SaveData, clearSave, defaultSave, loadSave, writeSave } from './game/storage';
 import { spriteMarkup, use } from './ui/art';
 import { GameView, ITEM_DESC, ITEM_LABEL } from './ui/gameView';
 import { HomeView } from './ui/homeView';
+import { StatsView } from './ui/statsView';
 import { watchLayout } from './ui/layout';
 import { confetti, openSheet, toast } from './ui/overlay';
 
@@ -21,8 +23,9 @@ const clampLevel = (x: number) => Math.min(MAX_LEVEL, Math.max(1, Math.floor(x) 
 export class App {
   save: SaveData = loadSave();
   readonly sound = new Sound();
+  readonly stats = new Stats(this);
   private readonly root: HTMLElement;
-  private view: GameView | HomeView | null = null;
+  private view: GameView | HomeView | StatsView | null = null;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -36,12 +39,13 @@ export class App {
     window.addEventListener('pagehide', flush);
   }
 
-  /** ?level=701 → 그 레벨, ?daily → 오늘의 퍼즐, ?home → 홈. 기본은 이어서 하기 */
+  /** ?level=701 → 그 레벨, ?daily → 오늘의 퍼즐, ?home → 홈, ?stats → 하루 통계. 기본은 이어서 하기 */
   start(): void {
     const q = new URLSearchParams(location.search);
     if (q.has('level')) return this.play(clampLevel(Number(q.get('level'))));
     if (q.has('daily')) return this.playDaily();
     if (q.has('home')) return this.goHome();
+    if (q.has('stats')) return this.openStats();
     this.play();
   }
 
@@ -54,7 +58,7 @@ export class App {
     this.sound.vibrate = this.save.settings.vibrate;
   }
 
-  private mount(view: GameView | HomeView): void {
+  private mount(view: GameView | HomeView | StatsView): void {
     this.view?.destroy();
     this.view = view;
     this.root.appendChild(view.root);
@@ -92,7 +96,21 @@ export class App {
     this.mount(new HomeView(this));
   }
 
+  openStats(): void {
+    this.mount(new StatsView(this));
+  }
+
   won(view: GameView, s: WinSummary): void {
+    this.stats.cleared({
+      at: Date.now(),
+      mode: view.mode,
+      level: view.level,
+      size: view.game.n,
+      diff: difficultyOf(view.game.puzzle).label,
+      ms: Math.round(s.elapsed),
+      score: s.total,
+      mistakes: s.mistakes,
+    });
     const table = `<div class="score-table">
         <div><span>고양이 점수</span><b>${s.catPoints.toLocaleString()}</b></div>
         <div><span>남은 물고기 보너스</span><b>+${s.fishBonus}</b></div>

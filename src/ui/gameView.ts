@@ -3,6 +3,7 @@ import { COLOR_ORDER, PALETTE } from '../core/palette';
 import type { Puzzle } from '../core/types';
 import { CAT, EMPTY, Game, type GameEvent, MAX_FISH, type MouseRun, type Progress, type WinSummary, X } from '../game/game';
 import type { Sound } from '../game/sound';
+import type { Stats } from '../game/stats';
 import type { ItemKey, SaveData } from '../game/storage';
 import { catFace, use } from './art';
 import { isSheetOpen, openSheet, toast } from './overlay';
@@ -10,6 +11,7 @@ import { isSheetOpen, openSheet, toast } from './overlay';
 export interface GameHost {
   save: SaveData;
   sound: Sound;
+  stats: Stats;
   persist(): void;
   goHome(): void;
   openSettings(view: GameView): void;
@@ -92,6 +94,8 @@ export class GameView {
   private saveTimer = 0;
   private readonly offGame: () => void;
   private destroyed = false;
+  /** 이번에 판을 한 번이라도 만졌나 — 만진 판만 "플레이한 판"·플레이 시간으로 센다 */
+  private touched = false;
 
   constructor(host: GameHost, mode: Mode, puzzle: Puzzle, level: number, saved?: Progress | null) {
     this.host = host;
@@ -249,12 +253,14 @@ export class GameView {
         this.refreshHeads();
         break;
       case 'cat':
+        if (e.source === 'user') this.host.stats.cat();
         this.updateCell(e.cell, e.source === 'item' ? 'drop' : e.source === 'given' ? '' : 'pop');
         if (e.points) this.floatText(e.cell, `+${e.points}`);
         this.sound.meow();
         this.lookAt(e.cell);
         break;
       case 'wrong': {
+        this.host.stats.mistake();
         const el = this.cells[e.cell];
         el.classList.remove('wrong');
         void el.offsetWidth;
@@ -286,6 +292,7 @@ export class GameView {
         this.celebrate(e.summary);
         break;
       case 'lost':
+        this.host.stats.gameOver();
         this.sound.lose();
         setTimeout(() => this.showLost(), 750);
         break;
@@ -418,13 +425,21 @@ export class GameView {
     if (!mode) return;
     const changed = this.game.paint(cells, mode);
     if (changed.length) {
+      this.touch();
       if (mode === 'x') this.sound.mark();
       else this.sound.erase();
     }
   }
 
+  private touch(): void {
+    if (this.touched) return;
+    this.touched = true;
+    this.host.stats.touch(this.game.puzzle.id);
+  }
+
   private tapCell(cell: number): void {
     if (this.game.status !== 'playing') return;
+    this.touch();
     const m = this.game.marks[cell];
     if (m === EMPTY) {
       this.game.tap(cell);
@@ -464,6 +479,7 @@ export class GameView {
       return;
     }
     if (this.cursor < 0) return;
+    if (['x', 'X', 'c', 'C', 'Backspace', 'Delete'].includes(e.key)) this.touch();
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
       this.tapCell(this.cursor);
@@ -542,6 +558,8 @@ export class GameView {
       this.runMouse(run);
     }
     items[key]--;
+    this.touch();
+    this.host.stats.item(key);
     this.updateBadges();
     this.host.persist();
   }
@@ -649,6 +667,7 @@ export class GameView {
     const dt = now - this.lastTick;
     this.lastTick = now;
     if (document.hidden || isSheetOpen()) return;
+    if (this.game.status === 'playing' && this.touched) this.host.stats.addTime(Math.min(dt, 2000));
     this.game.tick(Math.min(dt, 2000));
     if (Math.round(this.game.elapsed / 1000) % 10 === 0) this.schedulePersist();
   }

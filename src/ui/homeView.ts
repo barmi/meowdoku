@@ -1,10 +1,14 @@
 import { difficultyOf, levelPuzzle, todayKey } from '../core/levels';
 import { COLOR_ORDER, PALETTE } from '../core/palette';
+import type { Stats } from '../game/stats';
 import type { SaveData } from '../game/storage';
 import { catFace, use } from './art';
+import { fmtDuration, fmtNum } from './format';
 
 export interface HomeHost {
   save: SaveData;
+  stats: Stats;
+  openStats(): void;
   play(level?: number): void;
   playDaily(): void;
   openSettings(): void;
@@ -26,6 +30,7 @@ export class HomeView {
     const today = todayKey();
     const [, mm, dd] = today.split('-').map(Number);
     const done = save.daily[today];
+    const day = host.stats.peek(today);
 
     this.root = document.createElement('section');
     this.root.className = 'home';
@@ -65,11 +70,16 @@ export class HomeView {
           <button class="btn ${done ? 'soft' : 'green'}" data-act="daily">${done ? '다시 풀기' : '도전하기'}</button>
         </div>
         <div class="card">
-          <div class="stat-grid">
-            <div><b>${save.best}</b><span>최고 레벨</span></div>
-            <div><b>${save.cleared}</b><span>클리어</span></div>
-            <div><b>${save.totalScore.toLocaleString()}</b><span>총 점수</span></div>
+          <div class="row">
+            <div class="title">오늘</div>
+            <button class="link" data-act="stats">하루 통계 ›</button>
           </div>
+          <div class="stat-grid today">
+            <div><b>${day?.cleared ?? 0}판</b><span>클리어</span></div>
+            <div><b>${fmtDuration(day?.playMs ?? 0)}</b><span>플레이</span></div>
+            <div><b>${fmtNum(day?.score ?? 0)}</b><span>점수</span></div>
+          </div>
+          <div class="meta total-line">전체 · 최고 레벨 ${save.best} · 클리어 ${save.cleared}판 · 총점 ${fmtNum(save.totalScore)}</div>
         </div>
       </div>`;
 
@@ -79,6 +89,7 @@ export class HomeView {
       else if (act === 'daily') host.playDaily();
       else if (act === 'settings') host.openSettings();
       else if (act === 'pick') host.pickLevel();
+      else if (act === 'stats') host.openStats();
     });
 
     // 큰 고양이도 가끔 두리번거린다

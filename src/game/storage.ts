@@ -1,4 +1,5 @@
 import type { Progress } from './game';
+import type { DayStats } from './stats';
 
 export interface Settings {
   sound: boolean;
@@ -24,6 +25,8 @@ export interface SaveData {
   daily: Record<string, { score: number; ms: number }>;
   seenHelp: boolean;
   rewardTurn: number;
+  /** 날짜(YYYY-MM-DD)별 하루 통계 (#5) */
+  stats: Record<string, DayStats>;
 }
 
 const KEY = 'meowdoku.save.v1';
@@ -41,6 +44,7 @@ export function defaultSave(): SaveData {
     daily: {},
     seenHelp: false,
     rewardTurn: 0,
+    stats: {},
   };
 }
 
@@ -59,6 +63,7 @@ export function loadSave(): SaveData {
       settings: { ...base.settings, ...data.settings },
       progress: { ...data.progress },
       daily: { ...data.daily },
+      stats: { ...data.stats },
     };
   } catch {
     return base;

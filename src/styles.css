@@ -1313,6 +1313,335 @@ button {
   height: calc(30 * var(--px));
 }
 
+.stat-grid.today {
+  margin-top: calc(10 * var(--px));
+}
+
+.total-line {
+  margin-top: calc(10 * var(--px));
+  text-align: center;
+}
+
+/* ───────── 하루 통계 (#5) ───────── */
+
+.stats-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(12 * var(--px));
+  padding: calc(max(env(safe-area-inset-top), 10 * var(--px)) + 8.5 * var(--px)) calc(16 * var(--px))
+    calc(env(safe-area-inset-bottom) + 28 * var(--px));
+  min-height: 100dvh;
+}
+
+.stats-screen .topbar {
+  width: calc(428 * var(--px));
+  margin: 0 calc(-16 * var(--px));
+}
+
+.screen-title {
+  margin: 0;
+  text-align: center;
+  font-size: calc(21 * var(--px));
+  line-height: calc(39 * var(--px));
+  font-weight: 800;
+}
+
+.stats-screen .card {
+  width: 100%;
+}
+
+.stats-screen h3 {
+  margin: 0 0 calc(10 * var(--px));
+  font-size: calc(15.5 * var(--px));
+  font-weight: 800;
+}
+
+.date-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(14 * var(--px));
+  margin-top: calc(4 * var(--px));
+}
+
+.date-nav button {
+  width: calc(40 * var(--px));
+  height: calc(40 * var(--px));
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  font-size: calc(24 * var(--px));
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink-2);
+}
+
+.date-nav button:disabled {
+  opacity: 0.35;
+  box-shadow: none;
+  cursor: default;
+}
+
+.date-nav .date {
+  min-width: calc(150 * var(--px));
+  text-align: center;
+  font-size: calc(18 * var(--px));
+  font-weight: 800;
+}
+
+.date-nav small {
+  display: inline-block;
+  margin-left: calc(4 * var(--px));
+  padding: calc(2 * var(--px)) calc(8 * var(--px));
+  border-radius: 999px;
+  background: #fff1e4;
+  color: #c0621f;
+  font-size: calc(12 * var(--px));
+  vertical-align: middle;
+}
+
+.tiles {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: calc(10 * var(--px));
+}
+
+.tile {
+  background: var(--card);
+  border-radius: calc(18 * var(--px));
+  padding: calc(12 * var(--px)) calc(14 * var(--px));
+  box-shadow: 0 calc(2 * var(--px)) calc(10 * var(--px)) rgba(236, 168, 118, 0.18);
+}
+
+.tile .label {
+  font-size: calc(13 * var(--px));
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.tile .value {
+  font-size: calc(26 * var(--px));
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-top: calc(2 * var(--px));
+}
+
+.tile .sub {
+  font-size: calc(12 * var(--px));
+  color: var(--ink-soft);
+  margin-top: calc(2 * var(--px));
+}
+
+.hchart {
+  position: relative;
+  padding-top: calc(18 * var(--px));
+}
+
+.hours {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: calc(110 * var(--px));
+  border-bottom: 1px solid #efe3da;
+}
+
+.hcol {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.hcol i {
+  display: block;
+  width: 100%;
+  max-width: 24px;
+  background: #d9722c;
+  border-radius: 4px 4px 0 0;
+}
+
+.hcol.on i {
+  background: #b85a1b;
+}
+
+.hcol .hmax {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translate(-50%, calc(-3 * var(--px)));
+  font-size: calc(11.5 * var(--px));
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.hcol.zero {
+  cursor: default;
+}
+
+.haxis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: calc(4 * var(--px));
+  font-size: calc(11 * var(--px));
+  color: var(--ink-soft);
+}
+
+.htip {
+  position: absolute;
+  top: calc(-10 * var(--px));
+  transform: translateX(-50%);
+  background: rgba(88, 48, 40, 0.92);
+  color: #fff;
+  font-size: calc(12.5 * var(--px));
+  font-weight: 700;
+  padding: calc(4 * var(--px)) calc(9 * var(--px));
+  border-radius: 999px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.kv {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: calc(10 * var(--px));
+  padding: calc(7 * var(--px)) 0;
+  border-bottom: 1px solid #f5ece6;
+  font-size: calc(14.5 * var(--px));
+}
+
+.kv:last-child {
+  border-bottom: 0;
+}
+
+.kv b {
+  text-align: right;
+}
+
+.kv small {
+  display: block;
+  font-weight: 500;
+  font-size: calc(12 * var(--px));
+  color: var(--ink-soft);
+}
+
+.item-uses {
+  display: flex;
+  justify-content: space-around;
+  margin-top: calc(10 * var(--px));
+}
+
+.item-uses div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(2 * var(--px));
+}
+
+.item-uses svg {
+  width: calc(36 * var(--px));
+  height: calc(36 * var(--px));
+}
+
+.item-uses b {
+  font-size: calc(18 * var(--px));
+}
+
+.item-uses span {
+  font-size: calc(12 * var(--px));
+  color: var(--ink-soft);
+}
+
+.srow {
+  display: grid;
+  grid-template-columns: calc(44 * var(--px)) 1fr calc(44 * var(--px));
+  align-items: center;
+  gap: calc(8 * var(--px));
+  padding: calc(4 * var(--px)) 0;
+  font-size: calc(14 * var(--px));
+}
+
+.srow b {
+  text-align: right;
+}
+
+.strack {
+  height: calc(12 * var(--px));
+}
+
+.strack i {
+  display: block;
+  height: 100%;
+  background: #d9722c;
+  border-radius: 0 4px 4px 0;
+  min-width: 4px;
+}
+
+.crow {
+  display: grid;
+  grid-template-columns: calc(46 * var(--px)) 1fr auto;
+  align-items: center;
+  gap: calc(10 * var(--px));
+  padding: calc(8 * var(--px)) 0;
+  border-bottom: 1px solid #f5ece6;
+  font-size: calc(14.5 * var(--px));
+}
+
+.crow:last-child {
+  border-bottom: 0;
+}
+
+.crow .when {
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.crow small {
+  display: block;
+  font-size: calc(12 * var(--px));
+  color: var(--ink-soft);
+}
+
+.crow .how {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-empty {
+  text-align: center;
+  padding: calc(26 * var(--px)) calc(16 * var(--px));
+}
+
+.stats-empty .sleepy {
+  width: calc(120 * var(--px));
+  height: calc(120 * var(--px));
+  margin: 0 auto calc(8 * var(--px));
+}
+
+.stats-empty .sleepy svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.stats-empty p {
+  margin: calc(4 * var(--px)) 0;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
