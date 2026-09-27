@@ -185,11 +185,12 @@ function winkCat(id: string): string {
 
 /* ───────────── 생각 정리용 마커 (#10) ───────────── */
 
-/** 1 세모, 2 동그라미, 3 네모 */
+/** 1 세모, 2 동그라미, 3 네모, 4 ? */
 export const NOTE_SHAPES: Record<number, string> = {
   1: '<path d="M50 19.5L81.5 73.5H18.5Z"/>',
   2: '<circle cx="50" cy="50" r="28"/>',
   3: '<rect x="23.5" y="23.5" width="53" height="53" rx="6"/>',
+  4: '<path d="M36.5 37C36.5 28 43 22.5 50.5 22.5S64 27.5 64 36C64 46 51 47 51 59"/><circle cx="51" cy="74.5" r="1.8"/>',
 };
 
 /** 어느 칸 색에서도 보이게: 어두운 반투명 테두리 위에 흰 선 */
@@ -254,7 +255,7 @@ export function spriteMarkup(): string {
       <rect x="39" y="15.5" width="22" height="69" rx="7.5" transform="rotate(-45 50 50)"/>
     </g>
   </symbol>
-  ${[1, 2, 3].map((k) => `<symbol id="note-${k}" viewBox="0 0 100 100">${noteShape(NOTE_SHAPES[k])}</symbol>`).join('')}
+  ${[1, 2, 3, 4].map((k) => `<symbol id="note-${k}" viewBox="0 0 100 100">${noteShape(NOTE_SHAPES[k])}</symbol>`).join('')}
   <symbol id="ico-eraser" viewBox="0 0 100 100">
     <g transform="rotate(-40 50 50)">
       <rect x="22" y="33" width="56" height="34" rx="8" fill="none" stroke="currentColor" stroke-width="8"/>

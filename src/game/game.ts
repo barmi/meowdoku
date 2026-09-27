@@ -12,8 +12,10 @@ export const WRONG = 3;
 
 /** 생각 정리용 마커 (#10) — 판정·힌트·통계와 무관하다. 0 없음 */
 export const NOTE_NONE = 0;
-export type NoteShape = 1 | 2 | 3;
-export const NOTE_NAMES: Record<NoteShape, string> = { 1: '세모', 2: '동그라미', 3: '네모' };
+/** '?' 마커 — "변환" 으로 한꺼번에 고양이로 놓는다 (#11) */
+export const NOTE_QUESTION = 4;
+export type NoteShape = 1 | 2 | 3 | 4;
+export const NOTE_NAMES: Record<NoteShape, string> = { 1: '세모', 2: '동그라미', 3: '네모', 4: '물음표' };
 
 export const MAX_FISH = 3;
 
@@ -124,7 +126,7 @@ export class Game {
       this.status = saved.status;
       this.gameId = saved.gameId ?? this.gameId;
       if (saved.notes?.length === this.notes.length) {
-        for (let i = 0; i < this.notes.length; i++) this.notes[i] = Math.min(3, Number(saved.notes[i]) || 0);
+        for (let i = 0; i < this.notes.length; i++) this.notes[i] = Math.min(NOTE_QUESTION, Number(saved.notes[i]) || 0);
       }
       // 예전 저장본에 틀린 고양이가 남아 있으면 안전하게 빨간 X 로
       for (let i = 0; i < this.marks.length; i++) {
@@ -245,6 +247,21 @@ export class Game {
     for (const c of changed) this.notes[c] = shape;
     if (changed.length) this.emit({ type: 'notes', cells: changed });
     return changed;
+  }
+
+  /** 빈 칸 위에 보이는 '?' 마커 칸 (위→아래, 왼→오른) */
+  questionCells(): number[] {
+    const out: number[] = [];
+    this.notes.forEach((v, i) => v === NOTE_QUESTION && this.marks[i] === EMPTY && out.push(i));
+    return out;
+  }
+
+  /** '?' 마커 한 칸을 고양이로 놓는다 (#11) — 더블탭과 같은 판정. 결과: 'cat' | 'wrong' | null */
+  convertQuestion(cell: number): 'cat' | 'wrong' | null {
+    if (this.status !== 'playing' || this.notes[cell] !== NOTE_QUESTION || this.marks[cell] !== EMPTY) return null;
+    this.notes[cell] = NOTE_NONE;
+    this.emit({ type: 'notes', cells: [cell] });
+    return this.placeCat(cell, 'user') ? 'cat' : 'wrong';
   }
 
   /** 마커 전체 지우기 — 지운 개수 */

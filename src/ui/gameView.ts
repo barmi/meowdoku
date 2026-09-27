@@ -187,11 +187,12 @@ export class GameView {
           <div class="track">
             <div class="page rules" data-page="rules">${RULES.map(([spec, text]) => `<div class="rule">${miniGrid(spec)}<span>${text}</span></div>`).join('')}</div>
             <div class="page markers" data-page="markers">
-              ${([1, 2, 3] as NoteShape[])
-                .map((k) => `<button class="tool" data-tool="${k}" aria-pressed="false">${noteToolIcon(k)}<span>${NOTE_NAMES[k]}</span></button>`)
+              ${([1, 2, 3, 4] as NoteShape[])
+                .map((k) => `<button class="tool" data-tool="${k}" aria-pressed="false" aria-label="${NOTE_NAMES[k]} 마커">${noteToolIcon(k)}<span>${NOTE_NAMES[k]}</span></button>`)
                 .join('')}
               <button class="tool" data-tool="0" aria-pressed="false"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#ico-eraser"/></svg><span>지우개</span></button>
               <button class="clear-notes">전체<br>지우기</button>
+              <button class="convert-notes" aria-label="? 를 모두 고양이로 변환"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#cat-static"/></svg><span>변환</span></button>
             </div>
           </div>
         </div>
@@ -442,6 +443,7 @@ export class GameView {
       const tool = target.closest<HTMLElement>('[data-tool]');
       if (tool) return this.selectTool(Number(tool.dataset.tool));
       if (target.closest('.clear-notes')) return this.clearNotes();
+      if (target.closest('.convert-notes')) return this.convertQuestions();
       const t = target.closest<HTMLElement>('[data-act],[data-item]');
       if (!t) return;
       if (t.dataset.act === 'back') this.host.goHome();
@@ -610,6 +612,31 @@ export class GameView {
     }
     this.board.parentElement?.classList.toggle('marking', this.tool !== null);
     this.lastTap = null;
+  }
+
+  /** 보이는 '?' 마커를 하나씩 고양이로 놓는다 — 틀리면 평소처럼 물고기를 잃고, 게임이 끝나면 멈춘다 (#11) */
+  private convertQuestions(): void {
+    if (this.busy || this.game.status !== 'playing') return;
+    const cells = this.game.questionCells();
+    if (!cells.length) return toast('변환할 ? 마커가 없어요');
+    this.busy = true;
+    this.touch();
+    let ok = 0;
+    let bad = 0;
+    let i = 0;
+    const step = () => {
+      if (this.destroyed) return;
+      if (i >= cells.length || this.game.status !== 'playing') {
+        this.busy = false;
+        if (this.game.status === 'playing') toast(bad ? `고양이 ${ok}마리 · 틀린 자리 ${bad}곳` : `? ${ok}개를 고양이로 바꿨어요`);
+        return;
+      }
+      const r = this.game.convertQuestion(cells[i++]);
+      if (r === 'cat') ok++;
+      else if (r === 'wrong') bad++;
+      setTimeout(step, 230);
+    };
+    step();
   }
 
   private clearNotes(): void {

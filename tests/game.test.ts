@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { levelPuzzle } from '../src/core/levels';
-import { CAT, EMPTY, Game, type GameEvent, MAX_FISH, WRONG, X } from '../src/game/game';
+import { CAT, EMPTY, Game, type GameEvent, MAX_FISH, NOTE_QUESTION, WRONG, X } from '../src/game/game';
 
 const P701 = () => levelPuzzle(701);
 const cell = (r: number, c: number) => r * 8 + c;
@@ -100,6 +100,25 @@ describe('Game', () => {
     h.setNote([cell(5, 5)], 1);
     h.restart();
     expect(h.notes.some((v) => v)).toBe(false);
+  });
+
+  it("'?' 마커 변환: 보이는 ? 만 순서대로 고양이로, 틀리면 빨간 X·물고기 -1 (#11)", () => {
+    const p = P701();
+    const g = new Game(p);
+    const right = cell(0, p.solution[0]);
+    const wrong = cell(1, 3);
+    const hidden = cell(2, 0);
+    g.setNote([wrong, right, hidden], NOTE_QUESTION);
+    g.tap(hidden); // X 아래 가려진 ? 는 변환하지 않는다
+    expect(g.questionCells()).toEqual([right, wrong]);
+    expect(g.convertQuestion(right)).toBe('cat');
+    expect(g.convertQuestion(wrong)).toBe('wrong');
+    expect(g.marks[right]).toBe(CAT);
+    expect(g.marks[wrong]).toBe(WRONG);
+    expect(g.fish).toBe(MAX_FISH - 1);
+    expect(g.notes[right]).toBe(0);
+    expect(g.questionCells()).toEqual([]);
+    expect(g.convertQuestion(cell(5, 5))).toBeNull(); // ? 가 아닌 칸
   });
 
   it('드래그: X 칠하기와 지우기, 고양이 칸은 그대로', () => {
