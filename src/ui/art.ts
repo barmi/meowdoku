@@ -223,7 +223,12 @@ export function spriteMarkup(): string {
   </defs>
   ${patterns}
   <symbol id="mark-x" viewBox="0 0 100 100">
-    <g fill="#fff">
+    <!-- 보통은 흰 X. 틀린 자리(#8)는 --xc 빨강 + --xs 흰 테두리로 칠한다 (테두리는 아래층에 따로) -->
+    <g style="fill:var(--xs,none);stroke:var(--xs,none);stroke-width:var(--xw,0);stroke-linejoin:round">
+      <rect x="39" y="15.5" width="22" height="69" rx="7.5" transform="rotate(45 50 50)"/>
+      <rect x="39" y="15.5" width="22" height="69" rx="7.5" transform="rotate(-45 50 50)"/>
+    </g>
+    <g style="fill:var(--xc,#fff)">
       <rect x="39" y="15.5" width="22" height="69" rx="7.5" transform="rotate(45 50 50)"/>
       <rect x="39" y="15.5" width="22" height="69" rx="7.5" transform="rotate(-45 50 50)"/>
     </g>

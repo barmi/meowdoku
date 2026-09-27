@@ -374,6 +374,7 @@ button {
 /* 판 */
 
 .board-wrap {
+  position: relative;
   margin-top: calc(33 * var(--px));
   width: calc(416 * var(--px));
   height: calc(416 * var(--px));
@@ -441,6 +442,60 @@ button {
 
 .cell.wrong .xm {
   transition-delay: 0.55s;
+}
+
+/* 틀린 자리 (#8): 흰 테두리 두른 빨간 X */
+.cell.wx {
+  --xc: #e8322f;
+  --xs: #ffffff;
+  --xw: 9px;
+}
+
+.cell.wx .xm {
+  filter: drop-shadow(0 calc(1 * var(--px)) calc(1.5 * var(--px)) rgba(120, 0, 0, 0.35));
+}
+
+.cell.nope {
+  animation: shake 0.32s;
+}
+
+/* 틀리면 게임 화면 전체가 지진처럼 흔들린다 */
+.game.quake {
+  animation: quake 0.65s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes quake {
+  10%,
+  90% {
+    transform: translate(calc(-2 * var(--px)), calc(1 * var(--px))) rotate(-0.4deg);
+  }
+  20%,
+  80% {
+    transform: translate(calc(5 * var(--px)), calc(-2 * var(--px))) rotate(0.7deg);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translate(calc(-9 * var(--px)), calc(3 * var(--px))) rotate(-1deg);
+  }
+  40%,
+  60% {
+    transform: translate(calc(9 * var(--px)), calc(-2 * var(--px))) rotate(1deg);
+  }
+}
+
+.board-wrap.hit {
+  animation: hit-glow 0.8s ease-out;
+}
+
+@keyframes hit-glow {
+  0%,
+  45% {
+    box-shadow: 0 0 0 calc(3 * var(--px)) #e8322f, 0 0 calc(24 * var(--px)) rgba(232, 50, 47, 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(232, 50, 47, 0);
+  }
 }
 
 .cell.cat .xm {

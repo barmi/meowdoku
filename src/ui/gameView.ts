@@ -1,7 +1,7 @@
 import type { Deduction } from '../core/logic';
 import { COLOR_ORDER, PALETTE } from '../core/palette';
 import type { Puzzle } from '../core/types';
-import { CAT, EMPTY, Game, type GameEvent, MAX_FISH, type MouseRun, type Progress, type WinSummary, X } from '../game/game';
+import { CAT, EMPTY, Game, type GameEvent, MAX_FISH, type MouseRun, type Progress, type WinSummary, WRONG, X } from '../game/game';
 import type { Sound } from '../game/sound';
 import type { Stats } from '../game/stats';
 import type { ItemKey, SaveData } from '../game/storage';
@@ -192,7 +192,8 @@ export class GameView {
   private updateCell(i: number, anim = ''): void {
     const el = this.cells[i];
     const m = this.game.marks[i];
-    el.classList.toggle('x', m === X);
+    el.classList.toggle('x', m === X || m === WRONG);
+    el.classList.toggle('wx', m === WRONG);
     el.classList.toggle('cat', m === CAT);
     const face = el.querySelector('.catface');
     if (m === CAT && !face) {
@@ -206,7 +207,7 @@ export class GameView {
     }
     const n = this.game.n;
     const name = PALETTE[this.game.puzzle.colors[this.game.regionOf(i)]].name;
-    const state = m === CAT ? '고양이' : m === X ? 'X' : '빈 칸';
+    const state = m === CAT ? '고양이' : m === WRONG ? '틀린 자리' : m === X ? 'X' : '빈 칸';
     el.setAttribute('aria-label', `${Math.floor(i / n) + 1}행 ${(i % n) + 1}열 ${name} 영역, ${state}`);
   }
 
@@ -273,6 +274,7 @@ export class GameView {
         break;
       case 'wrong': {
         this.host.stats.mistake();
+        this.quake();
         const el = this.cells[e.cell];
         el.classList.remove('wrong');
         void el.offsetWidth;
@@ -475,12 +477,26 @@ export class GameView {
     } else if (m === X) {
       this.game.tap(cell);
       this.sound.erase();
+    } else if (m === WRONG) {
+      this.replay(this.cells[cell], 'nope', 320); // 빨간 X 는 확정된 "고양이 아님" — 지워지지 않는다
     } else {
-      const c = this.cells[cell];
-      c.classList.add('happy');
-      setTimeout(() => c.classList.remove('happy'), 520);
+      this.replay(this.cells[cell], 'happy', 520);
     }
     this.lookAt(cell);
+  }
+
+  private replay(el: HTMLElement, cls: string, ms: number): void {
+    el.classList.remove(cls);
+    void el.offsetWidth;
+    el.classList.add(cls);
+    setTimeout(() => el.classList.remove(cls), ms);
+  }
+
+  /** 틀린 고양이: 게임 화면 전체가 지진처럼 흔들리고 판 테두리가 빨갛게 번쩍인다 (#8) */
+  private quake(): void {
+    this.replay(this.root, 'quake', 700);
+    const wrap = this.board.parentElement;
+    if (wrap) this.replay(wrap, 'hit', 800);
   }
 
   private setCursor(i: number): void {

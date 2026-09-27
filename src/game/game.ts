@@ -7,6 +7,8 @@ import type { Puzzle } from '../core/types';
 export const EMPTY = 0;
 export const X = 1;
 export const CAT = 2;
+/** 틀린 고양이 자리 — 빨간 X 로 남고 지워지지 않는다 (#8) */
+export const WRONG = 3;
 
 export const MAX_FISH = 3;
 
@@ -110,9 +112,9 @@ export class Game {
       this.continued = saved.continued;
       this.status = saved.status;
       this.gameId = saved.gameId ?? this.gameId;
-      // 예전 저장본에 틀린 고양이가 남아 있으면 안전하게 X 로
+      // 예전 저장본에 틀린 고양이가 남아 있으면 안전하게 빨간 X 로
       for (let i = 0; i < this.marks.length; i++) {
-        if (this.marks[i] === CAT && !this.solutionCells.has(i)) this.marks[i] = X;
+        if (this.marks[i] === CAT && !this.solutionCells.has(i)) this.marks[i] = WRONG;
       }
     } else {
       this.reset();
@@ -198,7 +200,7 @@ export class Game {
     else if (m === X) this.setMarks([cell], EMPTY);
   }
 
-  /** 더블탭의 첫 탭이 바꾼 X 표시를 되돌린다 */
+  /** 더블탭의 첫 탭이 바꾼 X 표시를 되돌린다 (빨간 X·고양이 칸은 그대로) */
   restoreMark(cell: number, mark: number): void {
     if (this.status === 'playing' && (mark === EMPTY || mark === X)) this.setMarks([cell], mark);
   }
@@ -220,20 +222,21 @@ export class Game {
   }
 
   private setMarks(cells: number[], value: number): number[] {
-    const changed = cells.filter((c) => this.marks[c] !== value && this.marks[c] !== CAT);
+    // 고양이와 빨간 X(틀린 자리)는 확정된 칸이라 표시를 바꾸지 않는다
+    const changed = cells.filter((c) => this.marks[c] !== value && this.marks[c] !== CAT && this.marks[c] !== WRONG);
     for (const c of changed) this.marks[c] = value;
     if (changed.length) this.emit({ type: 'marks', cells: changed });
     return changed;
   }
 
-  /** 고양이를 놓는다. 틀리면 물고기 -1, 칸은 X. */
+  /** 고양이를 놓는다. 틀리면 물고기 -1, 칸은 빨간 X. */
   placeCat(cell: number, source: CatSource): boolean {
-    if (this.status !== 'playing' || this.marks[cell] === CAT) return false;
+    if (this.status !== 'playing' || this.marks[cell] === CAT || this.marks[cell] === WRONG) return false;
     if (!this.solutionCells.has(cell)) {
       this.mistakes++;
       this.combo = 0;
       this.fish = Math.max(0, this.fish - 1);
-      this.marks[cell] = X;
+      this.marks[cell] = WRONG;
       this.emit({ type: 'wrong', cell });
       this.emit({ type: 'marks', cells: [cell] });
       this.emit({ type: 'fish', fish: this.fish, delta: -1 });
@@ -315,7 +318,7 @@ export class Game {
 
   private logicState() {
     const xs: number[] = [];
-    this.marks.forEach((m, i) => m === X && !this.solutionCells.has(i) && xs.push(i));
+    this.marks.forEach((m, i) => (m === X || m === WRONG) && !this.solutionCells.has(i) && xs.push(i));
     return stateFromMarks(this.geom, this.currentCats(), xs);
   }
 

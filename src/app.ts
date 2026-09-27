@@ -436,7 +436,7 @@ export class App {
         고양이끼리는 <b>대각선으로도 붙어 있을 수 없어요.</b></p>
         <div class="howto">
           <div class="step">${demo(use('pat-sparkle') + use('mark-x'))}<div>칸을 <b>한 번</b> 누르면 X — 고양이가 없는 칸 표시. 다시 누르면 지워져요.</div></div>
-          <div class="step">${demo(use('pat-sparkle') + use('cat-static'))}<div><b>두 번 빠르게</b> 누르면(더블탭) 고양이! 틀리면 물고기 한 마리를 잃어요. 물고기를 다 잃으면 게임 오버.</div></div>
+          <div class="step">${demo(use('pat-sparkle') + use('cat-static'))}<div><b>두 번 빠르게</b> 누르면(더블탭) 고양이! 틀리면 화면이 흔들리고 그 칸에 빨간 X 가 남으며 물고기 한 마리를 잃어요. 물고기를 다 잃으면 게임 오버.</div></div>
           <div class="step"><div class="strip">${demo(use('mark-x')).repeat(3)}${demo('')}</div><div>누른 채로 <b>쓸면</b> 여러 칸에 X. X 에서 시작해 쓸면 지우개가 돼요.</div></div>
           ${itemRow('cat')}${itemRow('bulb')}${itemRow('mouse')}
         </div>`,

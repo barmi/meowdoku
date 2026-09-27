@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { levelPuzzle } from '../src/core/levels';
-import { CAT, EMPTY, Game, type GameEvent, MAX_FISH, X } from '../src/game/game';
+import { CAT, EMPTY, Game, type GameEvent, MAX_FISH, WRONG, X } from '../src/game/game';
 
 const P701 = () => levelPuzzle(701);
 const cell = (r: number, c: number) => r * 8 + c;
@@ -50,7 +50,7 @@ describe('Game', () => {
     const ev = record(g);
     for (const c of [cell(0, 0), cell(1, 1), cell(1, 2)]) {
       g.placeCat(c, 'user');
-      expect(g.marks[c]).toBe(X);
+      expect(g.marks[c]).toBe(WRONG);
     }
     expect(g.fish).toBe(0);
     expect(g.status).toBe('lost');
@@ -59,6 +59,22 @@ describe('Game', () => {
     expect(g.continueGame()).toBe(true);
     expect(g.fish).toBe(MAX_FISH);
     expect(g.continueGame()).toBe(false);
+  });
+
+  it('틀린 자리는 빨간 X 로 남고 탭·드래그·다시 놓기로 바뀌지 않는다 (#8)', () => {
+    const g = new Game(P701());
+    const c = cell(0, 0);
+    expect(g.placeCat(c, 'user')).toBe(false);
+    expect(g.marks[c]).toBe(WRONG);
+    expect(g.fish).toBe(MAX_FISH - 1);
+    g.tap(c);
+    g.paint([c], 'erase');
+    g.restoreMark(c, EMPTY);
+    expect(g.marks[c]).toBe(WRONG);
+    expect(g.placeCat(c, 'user')).toBe(false);
+    expect(g.fish).toBe(MAX_FISH - 1); // 같은 자리로 두 번 벌받지 않는다
+    const restored = new Game(P701(), JSON.parse(JSON.stringify(g.toProgress())));
+    expect(restored.marks[c]).toBe(WRONG);
   });
 
   it('드래그: X 칠하기와 지우기, 고양이 칸은 그대로', () => {
