@@ -1,0 +1,17 @@
+{
+  "name": "Meowdoku",
+  "short_name": "Meowdoku",
+  "description": "색깔·행·열마다 고양이 한 마리 — 고양이끼리는 붙을 수 없는 퍼즐",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F7F2EF",
+  "theme_color": "#F7F2EF",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

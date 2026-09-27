@@ -1,0 +1,96 @@
+import { sizeForLevel, todayKey } from '../core/levels';
+import { COLOR_ORDER, PALETTE } from '../core/palette';
+import type { SaveData } from '../game/storage';
+import { catFace, use } from './art';
+
+export interface HomeHost {
+  save: SaveData;
+  play(level?: number): void;
+  playDaily(): void;
+  openSettings(): void;
+  pickLevel(): void;
+}
+
+/** 첫 화면 — 원본 스크린샷에는 없어서 게임 화면과 같은 톤으로 만들었다 */
+export class HomeView {
+  readonly root: HTMLElement;
+  private readonly timer: number;
+
+  constructor(host: HomeHost) {
+    const { save } = host;
+    const level = save.level;
+    const n = sizeForLevel(level);
+    const resume = save.progress.level?.id === `L${level}`;
+    const today = todayKey();
+    const [, mm, dd] = today.split('-').map(Number);
+    const done = save.daily[today];
+
+    this.root = document.createElement('section');
+    this.root.className = 'home';
+    this.root.innerHTML = `
+      <header class="topbar">
+        <button class="round-btn right" data-act="settings" aria-label="설정">${use('ico-gear')}</button>
+      </header>
+      <div class="logo">
+        <div class="big-cat">${catFace()}</div>
+        <h1>Meowdoku</h1>
+        <div class="sub">색깔·행·열마다 고양이 한 마리</div>
+        <div class="head-row">${COLOR_ORDER.map(
+          (c) => `<svg viewBox="0 0 100 100" style="color:${PALETTE[c].head}"><use href="#cat-head"/></svg>`,
+        ).join('')}</div>
+      </div>
+      <div class="menu">
+        <div class="card">
+          <div class="row">
+            <div>
+              <div class="title">${resume ? '이어서 하기' : '다음 레벨'}</div>
+              <div class="big">레벨 ${level}</div>
+              <div class="meta">${n}×${n} 판 · 고양이 ${n}마리</div>
+            </div>
+            <button class="link" data-act="pick">레벨 선택</button>
+          </div>
+          <button class="btn primary" data-act="play">${use('ico-play')}<span>플레이</span></button>
+        </div>
+        <div class="card">
+          <div class="row">
+            <div>
+              <div class="title">오늘의 퍼즐</div>
+              <div class="big" style="font-size:calc(26 * var(--px))">${mm}월 ${dd}일</div>
+              <div class="meta">9×9 판 · 하루 한 판</div>
+            </div>
+            ${done ? `<span class="done-chip">✓ ${done.score.toLocaleString()}점</span>` : ''}
+          </div>
+          <button class="btn ${done ? 'soft' : 'green'}" data-act="daily">${done ? '다시 풀기' : '도전하기'}</button>
+        </div>
+        <div class="card">
+          <div class="stat-grid">
+            <div><b>${save.best}</b><span>최고 레벨</span></div>
+            <div><b>${save.cleared}</b><span>클리어</span></div>
+            <div><b>${save.totalScore.toLocaleString()}</b><span>총 점수</span></div>
+          </div>
+        </div>
+      </div>`;
+
+    this.root.addEventListener('click', (e) => {
+      const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act;
+      if (act === 'play') host.play();
+      else if (act === 'daily') host.playDaily();
+      else if (act === 'settings') host.openSettings();
+      else if (act === 'pick') host.pickLevel();
+    });
+
+    // 큰 고양이도 가끔 두리번거린다
+    const face = this.root.querySelector<SVGElement>('.big-cat .catface')!;
+    const moods = ['look-l', 'look-r', 'look-u', 'blink', 'blink', 'smug'];
+    this.timer = window.setInterval(() => {
+      const m = moods[Math.floor(Math.random() * moods.length)];
+      face.classList.add(m);
+      setTimeout(() => face.classList.remove(m), m === 'blink' ? 140 : 1300);
+    }, 1600);
+  }
+
+  destroy(): void {
+    clearInterval(this.timer);
+    this.root.remove();
+  }
+}
