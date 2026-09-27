@@ -202,10 +202,16 @@ export class GameView {
       <div class="board-wrap">
         <div class="board" role="grid" tabindex="0" aria-label="${n}×${n} 퍼즐 판" style="--n:${n}">${cells}</div>
       </div>
-      <div class="items">${ITEMS.map(
-        (key) =>
-          `<button class="item ${key}" data-item="${key}" aria-label="${ITEM_LABEL[key]}">${use(ITEM_ICON[key])}<span class="badge"></span></button>`,
-      ).join('')}</div>`;
+      <div class="items">
+        <div class="item-group">${ITEMS.map(
+          (key) =>
+            `<button class="item ${key}" data-item="${key}" aria-label="${ITEM_LABEL[key]}">${use(ITEM_ICON[key])}<span class="badge"></span></button>`,
+        ).join('')}</div>
+        <div class="hist-group">
+          <button class="hist" data-hist="undo" aria-label="되돌리기" title="되돌리기 (Ctrl/⌘+Z)" disabled><svg viewBox="0 0 40 40" aria-hidden="true"><use href="#ico-undo"/></svg></button>
+          <button class="hist" data-hist="redo" aria-label="다시 하기" title="다시 하기 (Ctrl/⌘+Shift+Z)" disabled><svg viewBox="0 0 40 40" aria-hidden="true"><use href="#ico-redo"/></svg></button>
+        </div>
+      </div>`;
 
     this.board = this.root.querySelector('.board')!;
     this.track = this.root.querySelector('.track')!;
@@ -221,6 +227,25 @@ export class GameView {
     this.shownScore = this.game.score;
     this.scoreEl.textContent = String(this.game.score);
     this.updateBadges();
+    this.updateHistory();
+  }
+
+  /** 되돌리기·다시 하기는 할 수 있을 때만 켠다 (#12) */
+  private updateHistory(): void {
+    const undo = this.root.querySelector<HTMLButtonElement>('[data-hist="undo"]');
+    const redo = this.root.querySelector<HTMLButtonElement>('[data-hist="redo"]');
+    if (undo) undo.disabled = this.busy || !this.game.canUndo();
+    if (redo) redo.disabled = this.busy || !this.game.canRedo();
+  }
+
+  private history(dir: 'undo' | 'redo'): void {
+    if (this.busy || this.drag) return;
+    const cells = dir === 'undo' ? this.game.undo() : this.game.redo();
+    if (!cells) return;
+    this.touch();
+    if (dir === 'undo') this.sound.erase();
+    else this.sound.mark();
+    for (const c of cells) this.replay(this.cells[c], 'flash', 450);
   }
 
   private updateCell(i: number, anim = ''): void {
@@ -352,6 +377,7 @@ export class GameView {
         setTimeout(() => this.showLost(), 750);
         break;
     }
+    this.updateHistory();
     this.schedulePersist();
   }
 
@@ -418,12 +444,16 @@ export class GameView {
     b.addEventListener('pointerdown', (e) => this.onDown(e));
     b.addEventListener('pointermove', (e) => this.onMove(e));
     b.addEventListener('pointerup', () => this.onUp());
-    b.addEventListener('pointercancel', () => (this.drag = null));
+    b.addEventListener('pointercancel', () => {
+      if (this.drag?.mode) this.game.endBlock();
+      this.drag = null;
+    });
     b.addEventListener('lostpointercapture', () => this.onUp());
     b.addEventListener('contextmenu', (e) => e.preventDefault());
     b.addEventListener('keydown', (e) => this.onKey(e));
     b.addEventListener('blur', () => this.setCursor(-1));
     this.banner.addEventListener('click', () => this.hideBanner());
+    document.addEventListener('keydown', this.onGlobalKey);
     // 규칙 카드: 가로로 밀면 규칙 ↔ 마커 도구 (손가락 방향으로 넘어간다)
     const pager = this.root.querySelector<HTMLElement>('.pager')!;
     pager.addEventListener('pointerdown', (e) => (this.swipe = { x: e.clientX, y: e.clientY }));
@@ -444,6 +474,8 @@ export class GameView {
       if (tool) return this.selectTool(Number(tool.dataset.tool));
       if (target.closest('.clear-notes')) return this.clearNotes();
       if (target.closest('.convert-notes')) return this.convertQuestions();
+      const hist = target.closest<HTMLElement>('[data-hist]')?.dataset.hist;
+      if (hist) return this.history(hist as 'undo' | 'redo');
       const t = target.closest<HTMLElement>('[data-act],[data-item]');
       if (!t) return;
       if (t.dataset.act === 'back') this.host.goHome();
@@ -451,6 +483,17 @@ export class GameView {
       else if (t.dataset.item) this.useItem(t.dataset.item as ItemKey);
     });
   }
+
+  /** Ctrl/⌘+Z 되돌리기, Ctrl/⌘+Shift+Z · Ctrl+Y 다시 하기 */
+  private readonly onGlobalKey = (e: KeyboardEvent): void => {
+    if (!(e.ctrlKey || e.metaKey) || isSheetOpen()) return;
+    if ((e.target as HTMLElement | null)?.closest?.('input,textarea')) return;
+    const k = e.key.toLowerCase();
+    if (k === 'z' || k === 'y') {
+      e.preventDefault();
+      this.history(k === 'y' || e.shiftKey ? 'redo' : 'undo');
+    }
+  };
 
   private cellAt(x: number, y: number): number {
     const r = this.board.getBoundingClientRect();
@@ -482,6 +525,7 @@ export class GameView {
     if (d.mode === null) {
       this.lastTap = null; // 드래그는 더블탭이 아니다
       d.mode = this.tool !== null ? this.noteMode(d.start) : this.game.marks[d.start] === X ? 'erase' : 'x';
+      this.game.beginBlock(); // 한 번 쓴 드래그는 되돌리기 한 블록
       this.paint([d.start]);
     }
     this.paint(lineCells(this.game.n, d.last, cell));
@@ -492,7 +536,10 @@ export class GameView {
     const d = this.drag;
     if (!d) return;
     this.drag = null;
-    if (d.mode !== null) return;
+    if (d.mode !== null) {
+      this.game.endBlock();
+      return;
+    }
     if (this.tool !== null) this.noteTap(d.start);
     else this.tapCell(d.start);
   }
@@ -620,6 +667,7 @@ export class GameView {
     const cells = this.game.questionCells();
     if (!cells.length) return toast('변환할 ? 마커가 없어요');
     this.busy = true;
+    this.updateHistory();
     this.touch();
     let ok = 0;
     let bad = 0;
@@ -628,6 +676,7 @@ export class GameView {
       if (this.destroyed) return;
       if (i >= cells.length || this.game.status !== 'playing') {
         this.busy = false;
+        this.updateHistory();
         if (this.game.status === 'playing') toast(bad ? `고양이 ${ok}마리 · 틀린 자리 ${bad}곳` : `? ${ok}개를 고양이로 바꿨어요`);
         return;
       }
@@ -818,6 +867,8 @@ export class GameView {
 
   private runMouse(run: MouseRun): void {
     this.busy = true;
+    this.game.beginBlock(); // 쥐 한 번 = 되돌리기 한 블록
+    this.updateHistory();
     this.root.querySelector('.item.mouse')?.classList.add('busy');
     const n = this.game.n;
     const path = Array.from({ length: n }, (_, j) => (run.line === 'row' ? run.index * n + j : j * n + run.index));
@@ -856,7 +907,9 @@ export class GameView {
         place(path[path.length - 1], 1.2);
         setTimeout(() => {
           runner.remove();
+          this.game.endBlock();
           this.busy = false;
+          this.updateHistory();
           this.root.querySelector('.item.mouse')?.classList.remove('busy');
           this.sound.squeak();
         }, 160);
@@ -906,6 +959,7 @@ export class GameView {
     if (this.destroyed) return;
     this.persistNow();
     this.destroyed = true;
+    document.removeEventListener('keydown', this.onGlobalKey);
     this.offGame();
     this.intervals.forEach((t) => clearInterval(t));
     clearTimeout(this.saveTimer);

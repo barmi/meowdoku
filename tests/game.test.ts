@@ -121,6 +121,70 @@ describe('Game', () => {
     expect(g.convertQuestion(cell(5, 5))).toBeNull(); // ? 가 아닌 칸
   });
 
+  it('되돌리기·다시 하기: 블록 단위, X·마커만 되돌리고 고양이·물고기는 그대로 (#12)', () => {
+    const p = P701();
+    const g = new Game(p);
+    expect(g.canUndo()).toBe(false);
+    g.tap(cell(0, 0));
+    // 드래그 한 번 = 블록 하나 (여러 번에 걸쳐 칠해도)
+    g.beginBlock();
+    g.paint([cell(2, 0), cell(2, 1)], 'x');
+    g.paint([cell(2, 2)], 'x');
+    g.endBlock();
+    g.setNote([cell(4, 0), cell(4, 1)], 2);
+    expect(g.undo()?.sort()).toEqual([cell(4, 0), cell(4, 1)]);
+    expect(g.notes[cell(4, 0)]).toBe(0);
+    expect(g.undo()).toHaveLength(3);
+    expect(g.marks[cell(2, 1)]).toBe(EMPTY);
+    expect(g.canRedo()).toBe(true);
+    expect(g.redo()).toHaveLength(3);
+    expect(g.marks[cell(2, 2)]).toBe(X);
+    // 새 조작을 하면 다시 하기 목록은 비워진다
+    g.tap(cell(6, 0));
+    expect(g.canRedo()).toBe(false);
+    // 더블탭: 첫 탭의 X 기록은 빠지고 고양이는 확정
+    const sol = cell(0, p.solution[0]);
+    g.tap(sol);
+    g.restoreMark(sol, EMPTY);
+    g.placeCat(sol, 'user');
+    g.undo();
+    expect(g.marks[cell(6, 0)]).toBe(EMPTY);
+    expect(g.marks[sol]).toBe(CAT);
+    // 틀린 고양이·물고기는 되돌리지 않는다
+    g.placeCat(cell(1, 1), 'user');
+    const fish = g.fish;
+    g.undo();
+    expect(g.marks[cell(1, 1)]).toBe(WRONG);
+    expect(g.fish).toBe(fish);
+    expect(g.marks[cell(2, 0)]).toBe(EMPTY); // 대신 그 전 블록(드래그)이 되돌려짐
+    // 저장·복원
+    const h = new Game(p, JSON.parse(JSON.stringify(g.toProgress())));
+    expect(h.canUndo()).toBe(g.canUndo());
+    expect(h.redo()).toHaveLength(3);
+    h.restart();
+    expect(h.canUndo() || h.canRedo()).toBe(false);
+  });
+
+  it('그사이 고양이가 된 칸은 건너뛰고, 전체 지우기도 한 블록, 다 깨면 기록을 버린다 (#12)', () => {
+    const p = P701();
+    const g = new Game(p);
+    g.tap(cell(7, 0));
+    const sol = cell(1, p.solution[1]);
+    g.tap(sol); // X 블록
+    g.placeCat(sol, 'user'); // 키보드 C 처럼 X 위에 바로 고양이
+    expect(g.undo()).toEqual([cell(7, 0)]); // sol 블록은 되돌릴 게 없어 건너뜀
+    expect(g.marks[sol]).toBe(CAT);
+    g.setNote([cell(3, 0)], 1);
+    g.setNote([cell(5, 7)], 3);
+    expect(g.clearNotes()).toBe(2);
+    expect(g.undo()?.sort()).toEqual([cell(3, 0), cell(5, 7)].sort());
+    expect(g.notes[cell(5, 7)]).toBe(3);
+    p.solution.forEach((c, r) => g.placeCat(cell(r, c), 'user'));
+    expect(g.status).toBe('won');
+    expect(g.canUndo()).toBe(false);
+    expect(g.toProgress().history).toBeUndefined();
+  });
+
   it('드래그: X 칠하기와 지우기, 고양이 칸은 그대로', () => {
     const g = new Game(P701());
     g.placeCat(cell(2, 3), 'user');

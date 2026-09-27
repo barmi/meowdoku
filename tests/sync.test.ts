@@ -130,6 +130,25 @@ describe('두 기기 변경 합치기 (3-way)', () => {
     expect(merge3(base, local, remote).progress.level?.marks).toBe('0010');
   });
 
+  it('같은 판: 다른 곳에서 마커·되돌리기만 바꾸고 이 기기는 시간만 흘렀으면 다른 곳 것을 살린다', () => {
+    const base = defaultSave();
+    base.progress.level = { ...game('0000'), elapsed: 1000 };
+    const local = JSON.parse(JSON.stringify(base));
+    local.progress.level.elapsed = 5000; // 시간만 흐름
+    const remote = JSON.parse(JSON.stringify(base));
+    remote.progress.level.notes = '0400';
+    remote.progress.level.history = { u: [[1, 0, 0, 0, 4]], r: [] };
+    const m = merge3(base, local, remote);
+    expect(m.progress.level?.notes).toBe('0400');
+    expect(m.progress.level?.history?.u).toHaveLength(1);
+    expect(m.progress.level?.elapsed).toBe(5000);
+    // 이 기기가 X 를 하나 두었고 다른 곳은 마커를 바꿨으면 둘 다 산다
+    local.progress.level.marks = '1000';
+    const m2 = merge3(base, local, remote);
+    expect(m2.progress.level?.marks).toBe('1000');
+    expect(m2.progress.level?.notes).toBe('0400');
+  });
+
   it('숫자 기록은 큰 쪽, 끝낸 판·통계는 합친다', () => {
     const base = defaultSave();
     const local = JSON.parse(JSON.stringify(base));

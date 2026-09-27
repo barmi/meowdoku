@@ -17,6 +17,14 @@ export const NOTE_QUESTION = 4;
 export type NoteShape = 1 | 2 | 3 | 4;
 export const NOTE_NAMES: Record<NoteShape, string> = { 1: '세모', 2: '동그라미', 3: '네모', 4: '물음표' };
 
+/**
+ * 되돌리기 기록 (#12). 한 칸의 변화 = [칸, X표시 전, 후, 마커 전, 후], 블록 = 한 번의 조작으로 바뀐 칸들.
+ * 되돌리는 대상은 X 표시와 마커뿐 — 고양이(정답·틀림)·물고기·점수는 확정된 결과라 기록하지 않는다.
+ */
+export type Change = [number, number, number, number, number];
+type Block = Change[];
+const MAX_HISTORY = 100;
+
 export const MAX_FISH = 3;
 
 export function newGameId(): string {
@@ -36,8 +44,10 @@ export interface Progress {
   /** Puzzle.sig — 같은 레벨이라도 판이 바뀌었으면 복원하지 않는다 */
   sig?: string;
   marks: string;
-  /** 마커 (칸마다 0~3), 하나도 없으면 생략 */
+  /** 마커 (칸마다 0~4), 하나도 없으면 생략 */
   notes?: string;
+  /** 되돌리기/다시 하기 기록 — 블록마다 [칸, X전, X후, 마커전, 마커후, …] 를 이어 붙인 배열 */
+  history?: { u: number[][]; r: number[][] };
   fish: number;
   score: number;
   combo: number;
@@ -61,6 +71,7 @@ export interface WinSummary {
 export type GameEvent =
   | { type: 'marks'; cells: number[] }
   | { type: 'notes'; cells: number[] }
+  | { type: 'history' }
   | { type: 'cat'; cell: number; source: CatSource; points: number }
   | { type: 'wrong'; cell: number }
   | { type: 'fish'; fish: number; delta: number }
@@ -104,6 +115,11 @@ export class Game {
   autoX = false;
   /** 이번 판(시도)의 id — 처음부터 다시 하면 바뀐다 */
   gameId = newGameId();
+  private undoStack: Block[] = [];
+  private redoStack: Block[] = [];
+  /** 만들고 있는 블록 (드래그처럼 여러 번에 걸친 조작을 한 블록으로 묶는다) */
+  private building: Map<number, Change> | null = null;
+  private depth = 0;
 
   constructor(puzzle: Puzzle, saved?: Progress | null) {
     this.puzzle = puzzle;
@@ -128,6 +144,8 @@ export class Game {
       if (saved.notes?.length === this.notes.length) {
         for (let i = 0; i < this.notes.length; i++) this.notes[i] = Math.min(NOTE_QUESTION, Number(saved.notes[i]) || 0);
       }
+      this.undoStack = decodeBlocks(saved.history?.u, this.marks.length);
+      this.redoStack = decodeBlocks(saved.history?.r, this.marks.length);
       // 예전 저장본에 틀린 고양이가 남아 있으면 안전하게 빨간 X 로
       for (let i = 0; i < this.marks.length; i++) {
         if (this.marks[i] === CAT && !this.solutionCells.has(i)) this.marks[i] = WRONG;
@@ -150,6 +168,10 @@ export class Game {
     this.gameId = newGameId();
     this.marks.fill(EMPTY);
     this.notes.fill(NOTE_NONE);
+    this.undoStack = [];
+    this.redoStack = [];
+    this.building = null;
+    this.depth = 0;
     for (const g of this.puzzle.givens) this.marks[g] = CAT;
     this.fish = MAX_FISH;
     this.score = 0;
@@ -165,6 +187,7 @@ export class Game {
     this.reset();
     this.emit({ type: 'marks', cells: [...this.marks.keys()] });
     this.emit({ type: 'notes', cells: [...this.notes.keys()] });
+    this.emit({ type: 'history' });
     this.emit({ type: 'fish', fish: this.fish, delta: 0 });
     this.emit({ type: 'score', score: this.score });
   }
@@ -176,6 +199,9 @@ export class Game {
       sig: this.puzzle.sig,
       marks: Array.from(this.marks).join(''),
       ...(this.notes.some((v) => v) ? { notes: Array.from(this.notes).join('') } : {}),
+      ...(this.undoStack.length || this.redoStack.length
+        ? { history: { u: this.undoStack.map((b) => b.flat()), r: this.redoStack.map((b) => b.flat()) } }
+        : {}),
       fish: this.fish,
       score: this.score,
       combo: this.combo,
@@ -219,9 +245,18 @@ export class Game {
     else if (m === X) this.setMarks([cell], EMPTY);
   }
 
-  /** 더블탭의 첫 탭이 바꾼 X 표시를 되돌린다 (빨간 X·고양이 칸은 그대로) */
+  /** 더블탭의 첫 탭이 바꾼 X 표시를 되돌린다 (빨간 X·고양이 칸은 그대로). 첫 탭의 기록도 지운다 */
   restoreMark(cell: number, mark: number): void {
-    if (this.status === 'playing' && (mark === EMPTY || mark === X)) this.setMarks([cell], mark);
+    if (this.status !== 'playing' || (mark !== EMPTY && mark !== X)) return;
+    const top = this.undoStack[this.undoStack.length - 1];
+    if (!this.building && top?.length === 1 && top[0][0] === cell && top[0][1] === mark && top[0][2] === this.marks[cell]) {
+      this.undoStack.pop();
+      this.marks[cell] = mark;
+      this.emit({ type: 'marks', cells: [cell] });
+      this.emit({ type: 'history' });
+      return;
+    }
+    this.setMarks([cell], mark);
   }
 
   /** 드래그로 여러 칸에 X 를 칠하거나 지운다 (고양이 칸은 건드리지 않음) */
@@ -244,8 +279,14 @@ export class Game {
     const changed = cells.filter(
       (c) => this.notes[c] !== shape && (shape === NOTE_NONE || this.marks[c] === EMPTY),
     );
-    for (const c of changed) this.notes[c] = shape;
-    if (changed.length) this.emit({ type: 'notes', cells: changed });
+    if (!changed.length) return changed;
+    this.beginBlock();
+    for (const c of changed) {
+      this.record(c, this.marks[c], this.marks[c], this.notes[c], shape);
+      this.notes[c] = shape;
+    }
+    this.endBlock();
+    this.emit({ type: 'notes', cells: changed });
     return changed;
   }
 
@@ -268,9 +309,7 @@ export class Game {
   clearNotes(): number {
     const cells: number[] = [];
     this.notes.forEach((v, i) => v && cells.push(i));
-    this.notes.fill(NOTE_NONE);
-    if (cells.length) this.emit({ type: 'notes', cells });
-    return cells.length;
+    return this.setNote(cells, NOTE_NONE).length;
   }
 
   /** X 만 지운다 (키보드 Delete) */
@@ -281,9 +320,97 @@ export class Game {
   private setMarks(cells: number[], value: number): number[] {
     // 고양이와 빨간 X(틀린 자리)는 확정된 칸이라 표시를 바꾸지 않는다
     const changed = cells.filter((c) => this.marks[c] !== value && this.marks[c] !== CAT && this.marks[c] !== WRONG);
-    for (const c of changed) this.marks[c] = value;
-    if (changed.length) this.emit({ type: 'marks', cells: changed });
+    if (!changed.length) return changed;
+    this.beginBlock();
+    for (const c of changed) {
+      this.record(c, this.marks[c], value, this.notes[c], this.notes[c]);
+      this.marks[c] = value;
+    }
+    this.endBlock();
+    this.emit({ type: 'marks', cells: changed });
     return changed;
+  }
+
+  /* ───────── 되돌리기 / 다시 하기 (#12) ───────── */
+
+  /** 여러 번에 걸친 조작(드래그, 쥐 한 번)을 한 블록으로 묶는다 — endBlock 과 짝 */
+  beginBlock(): void {
+    if (this.depth++ === 0) this.building = new Map();
+  }
+
+  endBlock(): void {
+    if (this.depth === 0) return;
+    if (--this.depth > 0) return;
+    const b = this.building;
+    this.building = null;
+    const changes = b ? [...b.values()].filter(([, mb, ma, nb, na]) => mb !== ma || nb !== na) : [];
+    if (!changes.length) return;
+    this.undoStack.push(changes);
+    if (this.undoStack.length > MAX_HISTORY) this.undoStack.shift();
+    this.redoStack = [];
+    this.emit({ type: 'history' });
+  }
+
+  private record(cell: number, mb: number, ma: number, nb: number, na: number): void {
+    const b = this.building;
+    if (!b) return;
+    const prev = b.get(cell);
+    if (prev) {
+      prev[2] = ma;
+      prev[4] = na;
+    } else b.set(cell, [cell, mb, ma, nb, na]);
+  }
+
+  canUndo(): boolean {
+    return this.status === 'playing' && this.undoStack.length > 0;
+  }
+
+  canRedo(): boolean {
+    return this.status === 'playing' && this.redoStack.length > 0;
+  }
+
+  /** 가장 최근 블록을 되돌린다. 그사이 고양이·빨간 X 가 된 칸은 건너뛰고, 되돌릴 게 없는 블록은 버린다 */
+  undo(): number[] | null {
+    return this.step(this.undoStack, this.redoStack, 'undo');
+  }
+
+  redo(): number[] | null {
+    return this.step(this.redoStack, this.undoStack, 'redo');
+  }
+
+  private step(from: Block[], to: Block[], dir: 'undo' | 'redo'): number[] | null {
+    if (this.status !== 'playing') return null;
+    while (from.length) {
+      const b = from.pop()!;
+      const cells = this.applyBlock(b, dir);
+      if (cells.length) {
+        to.push(b);
+        this.emit({ type: 'history' });
+        return cells;
+      }
+    }
+    this.emit({ type: 'history' });
+    return null;
+  }
+
+  private applyBlock(b: Block, dir: 'undo' | 'redo'): number[] {
+    const markCells: number[] = [];
+    const noteCells: number[] = [];
+    for (const [c, mb, ma, nb, na] of b) {
+      const [mFrom, mTo] = dir === 'undo' ? [ma, mb] : [mb, ma];
+      const [nFrom, nTo] = dir === 'undo' ? [na, nb] : [nb, na];
+      if (mFrom !== mTo && this.marks[c] === mFrom && (mTo === EMPTY || mTo === X)) {
+        this.marks[c] = mTo;
+        markCells.push(c);
+      }
+      if (nFrom !== nTo && this.notes[c] === nFrom) {
+        this.notes[c] = nTo;
+        noteCells.push(c);
+      }
+    }
+    if (markCells.length) this.emit({ type: 'marks', cells: markCells });
+    if (noteCells.length) this.emit({ type: 'notes', cells: noteCells });
+    return [...new Set([...markCells, ...noteCells])];
   }
 
   /** 고양이를 놓는다. 틀리면 물고기 -1, 칸은 빨간 X. */
@@ -330,6 +457,10 @@ export class Game {
 
   private win(): void {
     this.status = 'won';
+    // 다 깬 판은 되돌릴 필요가 없다
+    this.undoStack = [];
+    this.redoStack = [];
+    this.emit({ type: 'history' });
     const catPoints = this.score;
     const fishBonus = this.fish * 150;
     const perfectBonus = this.mistakes === 0 ? 300 : 0;
@@ -459,4 +590,20 @@ export class Game {
   applyMouse(run: MouseRun, cell: number): void {
     if (run.cells.includes(cell)) this.setMarks([cell], X);
   }
+}
+
+/** 저장된 기록을 블록으로 — 모양이 어긋난 건 버린다 */
+function decodeBlocks(raw: unknown, cells: number): Block[] {
+  if (!Array.isArray(raw)) return [];
+  const out: Block[] = [];
+  for (const flat of raw) {
+    if (!Array.isArray(flat) || !flat.length || flat.length % 5) continue;
+    const b: Block = [];
+    for (let k = 0; k < flat.length; k += 5) {
+      const ch = flat.slice(k, k + 5).map(Number) as Change;
+      if (ch.every(Number.isFinite) && ch[0] >= 0 && ch[0] < cells) b.push(ch);
+    }
+    if (b.length) out.push(b);
+  }
+  return out.slice(-MAX_HISTORY);
 }

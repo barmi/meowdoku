@@ -304,6 +304,12 @@ export function spriteMarkup(): string {
     <path d="M19.5 9.5L9.5 20L19.5 30.5M10.5 20H30.5" fill="none" stroke="currentColor" stroke-width="4.3" stroke-linecap="round" stroke-linejoin="round"/>
   </symbol>
   <symbol id="ico-gear" viewBox="0 0 40 40"><path fill="currentColor" fill-rule="evenodd" d="${gearPath()}"/></symbol>
+  <symbol id="ico-undo" viewBox="0 0 40 40">
+    <path d="M15.5 9.5L8.5 16.5L15.5 23.5M9.5 16.5H24.5C29 16.5 32.5 20 32.5 24.5S29 32.5 24.5 32.5H16.5" fill="none" stroke="currentColor" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="ico-redo" viewBox="0 0 40 40">
+    <path transform="matrix(-1 0 0 1 40 0)" d="M15.5 9.5L8.5 16.5L15.5 23.5M9.5 16.5H24.5C29 16.5 32.5 20 32.5 24.5S29 32.5 24.5 32.5H16.5" fill="none" stroke="currentColor" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
   <symbol id="ico-play" viewBox="0 0 24 24"><path d="M8.5 5.5L18.5 12L8.5 18.5Z" fill="#fff" stroke="#fff" stroke-width="2.6" stroke-linejoin="round"/></symbol>
   <symbol id="ico-paw" viewBox="0 0 100 100">${PATTERNS.paw.replace(/class="pf"/g, 'fill="currentColor"')}</symbol>
 </svg>`;

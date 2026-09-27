@@ -61,6 +61,28 @@ export function mergeStats(a: Record<string, DayStats>, b: Record<string, DaySta
   return out;
 }
 
+/**
+ * 같은 판을 양쪽이 조금씩 바꿨을 때 항목별로 합친다 — 한쪽만 바꾼 항목은 그쪽(다른 기기의 마커·되돌리기가
+ * 이 기기의 흐른 시간 때문에 버려지지 않게), 둘 다 바꾼 항목은 흐른 시간은 큰 쪽, 나머지는 이 기기의 마지막 액션.
+ */
+function mergeGame(b: Progress, l: Progress, r: Progress): Progress {
+  const out = clone(r) as unknown as Record<string, unknown>;
+  const B = b as unknown as Record<string, unknown>;
+  const L = l as unknown as Record<string, unknown>;
+  const R = r as unknown as Record<string, unknown>;
+  for (const k of new Set([...Object.keys(L), ...Object.keys(R)])) {
+    const lv = json(L[k]);
+    const rv = json(R[k]);
+    const bv = json(B[k]);
+    if (lv === bv || lv === rv) continue;
+    if (rv === bv || k === 'marks' || k === 'notes' || k === 'history') out[k] = clone(L[k]);
+    else if (k === 'elapsed' || k === 'sinceCat') out[k] = Math.max(Number(L[k]) || 0, Number(R[k]) || 0);
+    else out[k] = clone(L[k]);
+    if (out[k] === undefined) delete out[k];
+  }
+  return out as unknown as Progress;
+}
+
 function mergeProgress(
   base: SaveData['progress'],
   local: SaveData['progress'],
@@ -74,8 +96,9 @@ function mergeProgress(
     let pick: Progress | undefined;
     if (json(l) === json(b)) pick = r;
     else if (json(r) === json(b)) pick = l;
-    // 둘 다 바꿈: 다른 곳이 판을 실제로 진행했으면 그쪽, 아니면(시간만 흐름) 이 기기의 마지막 액션
-    else pick = sameGame(r, b) ? l : r;
+    // 둘 다 바꿈: 다른 곳이 판을 실제로 진행했으면 그쪽, 아니면 같은 판끼리 항목별로 합친다
+    else if (!sameGame(r, b)) pick = r;
+    else pick = b && l && r && l.gameId === r.gameId ? mergeGame(b, l, r) : l;
     if (pick) out[mode] = clone(pick);
   }
   return out;

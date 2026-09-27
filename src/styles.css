@@ -839,10 +839,59 @@ button {
 .items {
   position: relative;
   margin-top: calc(61 * var(--px));
-  width: calc(282.6 * var(--px));
+  width: calc(396 * var(--px));
   height: calc(63 * var(--px));
   display: flex;
+  align-items: center;
   justify-content: space-between;
+}
+
+/* 아이템 3개는 왼쪽으로, 오른쪽에 되돌리기·다시 하기 (#12) */
+.item-group {
+  display: flex;
+  gap: calc(24 * var(--px));
+}
+
+.hist-group {
+  display: flex;
+  gap: calc(10 * var(--px));
+}
+
+.hist {
+  width: calc(46 * var(--px));
+  height: calc(46 * var(--px));
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  color: var(--ink-2);
+  display: grid;
+  place-items: center;
+  transition: transform 0.12s, opacity 0.2s, box-shadow 0.2s;
+}
+
+.hist svg {
+  width: calc(27 * var(--px));
+  height: calc(27 * var(--px));
+}
+
+.hist:active:not(:disabled) {
+  transform: scale(0.9);
+}
+
+.hist:disabled {
+  opacity: 0.32;
+  box-shadow: none;
+  cursor: default;
+}
+
+.cell.flash::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.55);
+  animation: fade-out 0.45s forwards;
+  pointer-events: none;
 }
 
 .item {
