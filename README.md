@@ -74,7 +74,8 @@ npm run build    # 타입 검사 + dist/ 에 정적 빌드
 npm run serve    # 빌드 후 http://localhost:4173 로 서빙 (0.0.0.0)
 ```
 
-`dist/` 는 상대 경로(`base: './'`)로 빌드되므로 아무 정적 서버로 서빙해도 된다.
+`dist/` 는 상대 경로(`base: './'`)로 빌드되므로 아무 정적 서버로 서빙해도 된다
+(단, 정적 서버에는 아래 저장 API 가 없어서 기기별 저장으로만 동작한다).
 
 ```bash
 npm run build && python3 -m http.server 8080 -d dist
@@ -94,7 +95,32 @@ npm run build && python3 -m http.server 8080 -d dist
 | `/?home` | 홈 화면 |
 | `/?stats` | 하루 통계 |
 
-진행 상태·설정·아이템은 브라우저 `localStorage`(`meowdoku.save.v1`)에 저장된다.
+진행 상태·설정·아이템·통계는 브라우저 `localStorage`(`meowdoku.save.v1`)에 저장되고, 서버가 저장 API 를
+갖고 있으면 서버에도 저장해서 **어느 기기에서 열어도 이어서 한다** (아래).
+
+## 기기 사이 이어하기 (#6)
+
+`npm run dev`·`npm run serve` 서버에는 게임 상태 저장 API(`/api/state`)가 붙어 있다
+(`server/stateStore.ts`, Vite 플러그인). 상태는 서버 디스크의 JSON 파일 하나에 통째로 저장된다.
+
+| 항목 | 값 |
+| --- | --- |
+| 저장 파일 | `data/state.json` (git 제외), 환경변수 `MEOWDOKU_STATE=/경로/state.json` 으로 변경 |
+| `GET /api/state` | `{ rev, updatedAt, data }` |
+| `PUT /api/state` | `{ baseRev, data }` — baseRev 가 서버 rev 와 같을 때만 저장(rev+1), 아니면 409 + 최신 상태 |
+
+- 화면을 실시간으로 맞추지는 않는다. **액션마다 결과를 올리고**, 열 때·화면으로 돌아올 때(focus/visible)·
+  네트워크가 돌아올 때 최신 상태를 받는다. 흐른 시간만 바뀐 건 올리지 않고, 화면을 떠날 때 올린다.
+- 판마다 `gameId` 를 붙이고, 끝낸 판은 `finished` 목록에 남긴다. 다른 기기가 먼저 저장했으면:
+  - 붙잡고 있던 판이 **다른 곳에서 이미 끝났거나 다른 판으로 바뀌었으면 → 경고 후 최신 상태로 새로 로딩**
+  - 같은 판을 다른 곳에서 더 진행했으면 → 그 진행으로 새로 로딩하고 알림 (늦은 기기의 수는 버림)
+  - 다른 곳이 이 판을 건드리지 않았으면(시간·통계만 바뀜) → 마지막으로 맞춘 상태를 기준으로 3-way
+    병합해서 이 기기의 수를 살려 저장 (`src/game/merge.ts`)
+- 한 번도 서버와 맞춰 본 적 없는 기기는 서버 상태를 그대로 받는다. 서버가 비어 있으면 처음 접속한
+  기기의 상태가 공유 상태가 된다.
+- 서버에 닿지 않으면 이 기기에만 저장하고, 다시 연결되면 맞춘다. 설정 화면에 저장 상태가 보인다.
+- 인증이 없으니 믿을 수 있는 네트워크(LAN·Tailscale)에서만 연다. 처음부터 다시 하려면 서버를 끄고
+  `data/state.json` 을 지우거나, 설정의 "기록 초기화"(서버의 공유 상태도 초기화된다).
 
 ## 레벨(판 번호)과 난이도
 
@@ -123,6 +149,8 @@ src/
   game/
     game.ts        게임 규칙·점수·아이템 (이벤트만 내보냄)
     storage.ts     localStorage 저장
+    sync.ts        서버 저장 API 클라이언트 (rev, 기준 상태)
+    merge.ts       두 기기 변경 3-way 병합, 판 처지 판정(끝남/바뀜/더 진행/그대로)
     stats.ts       하루 통계 기록 (날짜별 집계, 연속 플레이, 90일 보관)
     sound.ts       WebAudio 합성 효과음 (파일 없음)
   ui/
@@ -133,6 +161,8 @@ src/
     overlay.ts     팝업·토스트·축하 효과
     layout.ts      화면 크기에 맞춰 --px(디자인 1px) 계산
   styles.css      치수는 원본 스크린샷(428×926pt)에서 잰 값
+server/
+  stateStore.ts   /api/state 저장소 (dev·preview 서버 미들웨어)
 tests/            vitest
 ```
 

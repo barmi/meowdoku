@@ -12,7 +12,8 @@ export interface GameHost {
   save: SaveData;
   sound: Sound;
   stats: Stats;
-  persist(): void;
+  /** push=false 면 이 기기에만 저장 (서버로는 다음 액션 때) */
+  persist(push?: boolean): void;
   goHome(): void;
   openSettings(view: GameView): void;
   won(view: GameView, summary: WinSummary): void;
@@ -96,6 +97,8 @@ export class GameView {
   private destroyed = false;
   /** 이번에 판을 한 번이라도 만졌나 — 만진 판만 "플레이한 판"·플레이 시간으로 센다 */
   private touched = false;
+  /** 다른 기기의 상태로 바뀌어 버려지는 화면 — 닫을 때 저장하지 않는다 */
+  private discarded = false;
 
   constructor(host: GameHost, mode: Mode, puzzle: Puzzle, level: number, saved?: Progress | null) {
     this.host = host;
@@ -205,6 +208,11 @@ export class GameView {
 
   private refreshHeads(): void {
     for (const [k, h] of this.heads) h.classList.toggle('found', this.game.regionSolved(k));
+  }
+
+  /** 다른 기기와 합친 뒤 아이템 수를 다시 그린다 */
+  refreshItems(): void {
+    this.updateBadges();
   }
 
   private updateBadges(bump?: ItemKey): void {
@@ -669,18 +677,33 @@ export class GameView {
     if (document.hidden || isSheetOpen()) return;
     if (this.game.status === 'playing' && this.touched) this.host.stats.addTime(Math.min(dt, 2000));
     this.game.tick(Math.min(dt, 2000));
-    if (Math.round(this.game.elapsed / 1000) % 10 === 0) this.schedulePersist();
+    // 흐른 시간만 바뀐 건 이 기기에만 저장한다 — 가만히 켜 둔 화면이 서버를 계속 덮어쓰지 않게
+    if (Math.round(this.game.elapsed / 1000) % 10 === 0) this.schedulePersist(false);
   }
 
-  private schedulePersist(): void {
+  private schedulePersist(push = true): void {
     clearTimeout(this.saveTimer);
-    this.saveTimer = window.setTimeout(() => this.persistNow(), 250);
+    this.saveTimer = window.setTimeout(() => this.persistNow(push), 250);
   }
 
-  persistNow(): void {
-    if (this.game.status === 'won') delete this.host.save.progress[this.mode];
-    else this.host.save.progress[this.mode] = this.game.toProgress();
-    this.host.persist();
+  persistNow(push = true): void {
+    if (this.discarded) return;
+    clearTimeout(this.saveTimer);
+    const save = this.host.save;
+    if (this.game.status === 'won') {
+      delete save.progress[this.mode];
+      // 끝낸 판 기록 — 다른 기기가 이 판을 이어가려 하면 경고하는 근거 (#6)
+      if (!save.finished.includes(this.game.gameId)) save.finished = [...save.finished, this.game.gameId].slice(-50);
+    } else {
+      save.progress[this.mode] = this.game.toProgress();
+    }
+    this.host.persist(push);
+  }
+
+  /** 다른 기기에서 저장한 상태로 바뀌었다 — 이 화면의 판 상태는 버린다 */
+  discard(): void {
+    this.discarded = true;
+    clearTimeout(this.saveTimer);
   }
 
   destroy(): void {

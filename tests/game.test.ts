@@ -117,6 +117,19 @@ describe('Game', () => {
     }
   });
 
+  it('판마다 gameId: 저장본에서 이어받고, 처음부터 다시 하면 새로 붙는다 (#6)', () => {
+    const p = P701();
+    const g = new Game(p);
+    const id = g.gameId;
+    expect(id).toBeTruthy();
+    g.tap(cell(0, 0));
+    const h = new Game(p, JSON.parse(JSON.stringify(g.toProgress())));
+    expect(h.gameId).toBe(id);
+    h.restart();
+    expect(h.gameId).not.toBe(id);
+    expect(new Game(p).gameId).not.toBe(id);
+  });
+
   it('진행 상태를 저장했다가 그대로 복원한다', () => {
     const p = P701();
     const g = new Game(p);

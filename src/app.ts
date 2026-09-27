@@ -3,6 +3,8 @@ import type { WinSummary } from './game/game';
 import { Sound } from './game/sound';
 import { Stats } from './game/stats';
 import { type ItemKey, type SaveData, clearSave, defaultSave, loadSave, writeSave } from './game/storage';
+import { merge3, standingOf } from './game/merge';
+import { type Remote, SyncClient } from './game/sync';
 import { spriteMarkup, use } from './ui/art';
 import { GameView, ITEM_DESC, ITEM_LABEL } from './ui/gameView';
 import { HomeView } from './ui/homeView';
@@ -24,23 +26,34 @@ export class App {
   save: SaveData = loadSave();
   readonly sound = new Sound();
   readonly stats = new Stats(this);
+  readonly sync = new SyncClient();
   private readonly root: HTMLElement;
   private view: GameView | HomeView | StatsView | null = null;
+  private pushTimer = 0;
+  private pushing = false;
+  private pushAgain = false;
+  private pulling = false;
 
   constructor(root: HTMLElement) {
     this.root = root;
     document.body.insertAdjacentHTML('afterbegin', spriteMarkup());
     this.applySettings();
     watchLayout();
+    // 화면이 가려질 때(다른 기기로 옮겨 갈 때) 바로 저장하고, 돌아오면 다른 기기의 진행을 확인한다
     const flush = () => {
-      if (this.view instanceof GameView) this.view.persistNow();
+      if (this.view instanceof GameView) this.view.persistNow(false);
+      writeSave(this.save);
+      if (this.sync.available && this.sync.dirty) void this.pushNow();
     };
-    document.addEventListener('visibilitychange', () => document.hidden && flush());
+    document.addEventListener('visibilitychange', () => (document.hidden ? flush() : void this.pull()));
     window.addEventListener('pagehide', flush);
+    window.addEventListener('focus', () => void this.pull());
+    window.addEventListener('online', () => void this.pull());
   }
 
   /** ?level=701 → 그 레벨, ?daily → 오늘의 퍼즐, ?home → 홈, ?stats → 하루 통계. 기본은 이어서 하기 */
-  start(): void {
+  async start(): Promise<void> {
+    await this.initialSync();
     const q = new URLSearchParams(location.search);
     if (q.has('level')) return this.play(clampLevel(Number(q.get('level'))));
     if (q.has('daily')) return this.playDaily();
@@ -49,8 +62,176 @@ export class App {
     this.play();
   }
 
-  persist(): void {
+  /* ───────── 기기 사이 이어하기 (#6) ─────────
+   * 서버(/api/state)에 게임 상태를 통째로 두고 rev 로 순서를 맞춘다. 화면을 실시간으로 맞추지는
+   * 않고, 액션 결과를 올리고 시작·복귀할 때 최신 상태를 받는다. base 는 마지막으로 서버와 맞춘
+   * 상태로, 두 기기가 각자 바꿨을 때 3-way 로 합치는 기준이다.
+   */
+
+  /** 처음 열 때 서버 상태와 맞춘다. 서버 API 가 없으면(정적 서빙) 이 기기 저장본으로 한다. */
+  private async initialSync(): Promise<void> {
+    const remote = await this.sync.fetchRemote();
+    if (!remote) return;
+    if (!remote.data) {
+      // 서버가 비었다 → 이 기기 상태를 공유 상태로 올린다
+      this.sync.rev = remote.rev;
+      await this.pushNow(true);
+      return;
+    }
+    if (remote.rev === this.sync.rev) {
+      if (this.changedSinceBase()) void this.pushNow();
+      return;
+    }
+    this.reconcile(remote);
+  }
+
+  private changedSinceBase(): boolean {
+    return !this.sync.base || JSON.stringify(this.save) !== JSON.stringify(this.sync.base);
+  }
+
+  /** 서버 상태를 그대로 이 기기의 상태로 삼는다 */
+  private takeRemote(remote: Remote): void {
+    if (!remote.data) return;
+    this.save = remote.data;
+    this.sync.rev = remote.rev;
+    this.sync.setBase(remote.data);
+    this.sync.syncedAt = remote.updatedAt;
+    this.sync.dirty = false;
+    this.sync.saveMeta();
     writeSave(this.save);
+    this.applySettings();
+  }
+
+  /** 마지막 액션의 결과를 저장한다. push=false 면 이 기기에만 (시간 경과처럼 사소한 변경) */
+  persist(push = true): void {
+    writeSave(this.save);
+    if (!this.sync.available) return;
+    this.sync.dirty = this.changedSinceBase();
+    this.sync.saveMeta();
+    if (push && this.sync.dirty) this.schedulePush();
+  }
+
+  private schedulePush(delay = 300): void {
+    clearTimeout(this.pushTimer);
+    this.pushTimer = window.setTimeout(() => void this.pushNow(), delay);
+  }
+
+  /** 바뀐 게 있을 때만 올린다 — 열어 보기만 한 기기가 rev 를 올려 다른 기기와 부딪치지 않게 */
+  private async pushNow(force = false): Promise<void> {
+    clearTimeout(this.pushTimer);
+    if (this.pushing) {
+      this.pushAgain = true;
+      return;
+    }
+    if (!force && !this.changedSinceBase()) {
+      this.sync.dirty = false;
+      this.sync.saveMeta();
+      return;
+    }
+    this.pushing = true;
+    try {
+      const snapshot = JSON.parse(JSON.stringify(this.save)) as SaveData;
+      const res = await this.sync.push(snapshot);
+      if (res.status === 'conflict') {
+        this.pushAgain = false;
+        this.reconcile(res.remote);
+      } else if (res.status === 'offline') {
+        this.schedulePush(15_000);
+      }
+    } finally {
+      this.pushing = false;
+      if (this.pushAgain) {
+        this.pushAgain = false;
+        void this.pushNow();
+      } else if (this.sync.online && this.changedSinceBase()) {
+        // 올리는 사이에 또 바뀌었다
+        this.schedulePush(50);
+      }
+    }
+  }
+
+  /** 화면으로 돌아오면 다른 기기가 더 진행했는지 본다 */
+  private async pull(): Promise<void> {
+    if (this.pulling || this.pushing) return;
+    this.pulling = true;
+    try {
+      const remote = await this.sync.fetchRemote();
+      if (!remote) return;
+      if (!remote.data) {
+        this.sync.rev = remote.rev;
+        void this.pushNow(true);
+        return;
+      }
+      if (remote.rev === this.sync.rev) {
+        if (this.changedSinceBase()) void this.pushNow();
+        return;
+      }
+      this.reconcile(remote);
+    } finally {
+      this.pulling = false;
+    }
+  }
+
+  /**
+   * 서버가 이 기기가 알던 것보다 앞서 있다 (다른 기기가 저장했다).
+   * - 붙잡고 있던 판이 다른 곳에서 끝났거나 다른 판으로 바뀌었으면 → 경고 후 새로 로딩
+   * - 같은 판을 다른 곳에서 더 진행했으면 → 그 진행으로 새로 로딩 (알림)
+   * - 이 판은 건드리지 않았으면 → 이 기기의 변경을 서버 상태에 얹어(3-way) 저장, 화면은 그대로
+   */
+  private reconcile(remote: Remote): void {
+    const data = remote.data;
+    if (!data) return;
+    const base = this.sync.base;
+    const view = this.view;
+    if (!base) {
+      // 이 기기는 서버와 맞춰 본 적이 없다 → 합칠 기준이 없으니 서버 상태를 그대로 받는다
+      if (!view) return this.takeRemote(remote);
+      return this.replaceWithRemote(remote, '', false);
+    }
+    if (view instanceof GameView && view.game.status !== 'won') {
+      const standing = standingOf(data, base, view.mode, view.game.gameId);
+      if (standing === 'finished') return this.replaceWithRemote(remote, '이 판은 다른 곳에서 이미 끝났어요.', true);
+      if (standing === 'other') return this.replaceWithRemote(remote, '다른 곳에서 다른 판을 진행하고 있어요.', false);
+      if (standing === 'advanced') return this.replaceWithRemote(remote, '', false);
+    }
+    const merged = merge3(base, this.save, data);
+    this.save = merged;
+    this.sync.rev = remote.rev;
+    this.sync.setBase(data);
+    this.sync.syncedAt = remote.updatedAt;
+    writeSave(merged);
+    this.applySettings();
+    this.sync.dirty = this.changedSinceBase();
+    this.sync.saveMeta();
+    if (view instanceof GameView) view.refreshItems();
+    else if (view instanceof HomeView) this.goHome();
+    else if (view instanceof StatsView) this.openStats();
+    if (this.sync.dirty) void this.pushNow();
+  }
+
+  private replaceWithRemote(remote: Remote, warning: string, finished: boolean): void {
+    const view = this.view;
+    if (view instanceof GameView) view.discard(); // 옛 판 상태를 다시 저장하지 않는다
+    this.takeRemote(remote);
+    const reload = () => {
+      if (view instanceof GameView) {
+        if (view.mode === 'daily') return finished ? this.goHome() : this.playDaily();
+        return this.play();
+      }
+      if (view instanceof StatsView) return this.openStats();
+      return this.goHome();
+    };
+    if (warning) {
+      openSheet({
+        html: `<div class="hero">${use('cat-static')}</div><h2>진행 상태가 달라요</h2>
+          <p>${warning}<br>다른 곳에서 저장한 최신 상태로 새로 불러올게요.</p>`,
+        dismissible: false,
+        actions: [{ label: '새로 불러오기', kind: 'primary', onClick: reload }],
+      });
+      return;
+    }
+    reload();
+    toast('다른 곳에서 진행한 내용을 불러왔어요');
   }
 
   private applySettings(): void {
@@ -59,6 +240,7 @@ export class App {
   }
 
   private mount(view: GameView | HomeView | StatsView): void {
+    this.root.querySelector('.boot')?.remove();
     this.view?.destroy();
     this.view = view;
     this.root.appendChild(view.root);
@@ -163,6 +345,15 @@ export class App {
     confetti(36, sheet.root.parentElement!);
   }
 
+  private syncLine(): string {
+    if (!this.sync.available) return '저장: 이 기기에만 (서버 저장 API 없음)';
+    const at = this.sync.syncedAt
+      ? new Date(this.sync.syncedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+      : '-';
+    if (!this.sync.online) return `저장: 서버에 연결 안 됨 — 이 기기에 저장해 두고 연결되면 올려요 (마지막 동기화 ${at})`;
+    return `저장: 서버와 동기화됨 · 마지막 저장 ${at}${this.sync.dirty ? ' · 올리는 중' : ''}`;
+  }
+
   openSettings(view?: GameView): void {
     const st = this.save.settings;
     const row = (key: keyof typeof st, label: string, desc: string) =>
@@ -173,7 +364,8 @@ export class App {
         ${row('sound', '효과음', '탭·고양이·물고기 소리')}
         ${row('vibrate', '진동', '지원하는 기기(안드로이드 등)에서만')}
         ${row('autoX', '자동 X 표시', '고양이를 놓으면 같은 행·열·색깔과 주변 칸을 X 로 채워요')}
-      </div>`,
+      </div>
+      <p class="hint-line sync-line">${this.syncLine()}</p>`,
       actions: [
         { label: '게임 방법', kind: 'soft', onClick: () => void setTimeout(() => this.showHelp(), 30) },
         view
@@ -199,6 +391,7 @@ export class App {
                       clearSave();
                       this.save = defaultSave();
                       this.applySettings();
+                      this.persist(); // 서버에 둔 공유 상태도 처음으로
                       this.goHome();
                       toast('기록을 초기화했어요');
                     }),

@@ -10,12 +10,20 @@ export const CAT = 2;
 
 export const MAX_FISH = 3;
 
+export function newGameId(): string {
+  const c = globalThis.crypto as Crypto | undefined;
+  if (c?.randomUUID) return c.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export type CatSource = 'given' | 'user' | 'item' | 'hint';
 export type Status = 'playing' | 'won' | 'lost';
 
 /** 저장용 진행 상태 */
 export interface Progress {
   id: string;
+  /** 판을 새로 시작할 때마다 새로 붙는 id — 다른 기기에서 끝난/바뀐 판인지 가려낸다 (#6) */
+  gameId?: string;
   /** Puzzle.sig — 같은 레벨이라도 판이 바뀌었으면 복원하지 않는다 */
   sig?: string;
   marks: string;
@@ -80,6 +88,8 @@ export class Game {
   continued = false;
   status: Status = 'playing';
   autoX = false;
+  /** 이번 판(시도)의 id — 처음부터 다시 하면 바뀐다 */
+  gameId = newGameId();
 
   constructor(puzzle: Puzzle, saved?: Progress | null) {
     this.puzzle = puzzle;
@@ -99,6 +109,7 @@ export class Game {
       this.sinceCat = saved.sinceCat;
       this.continued = saved.continued;
       this.status = saved.status;
+      this.gameId = saved.gameId ?? this.gameId;
       // 예전 저장본에 틀린 고양이가 남아 있으면 안전하게 X 로
       for (let i = 0; i < this.marks.length; i++) {
         if (this.marks[i] === CAT && !this.solutionCells.has(i)) this.marks[i] = X;
@@ -118,6 +129,7 @@ export class Game {
   }
 
   reset(): void {
+    this.gameId = newGameId();
     this.marks.fill(EMPTY);
     for (const g of this.puzzle.givens) this.marks[g] = CAT;
     this.fish = MAX_FISH;
@@ -140,6 +152,7 @@ export class Game {
   toProgress(): Progress {
     return {
       id: this.puzzle.id,
+      gameId: this.gameId,
       sig: this.puzzle.sig,
       marks: Array.from(this.marks).join(''),
       fish: this.fish,

@@ -136,8 +136,12 @@ function catBase(id: string): string {
     <path d="${NOSE}" fill="#EC9D90" stroke="#C97A6E" stroke-width=".7" stroke-linejoin="round"/>`;
 }
 
-function openEye(id: string, side: 'L' | 'R'): string {
+/** withLid=false: sprite 로 쓰는 정적 고양이 — <use> 안쪽에는 눈꺼풀을 숨기는 CSS 가 닿지 않는다 */
+function openEye(id: string, side: 'L' | 'R', withLid = true): string {
   const cx = side === 'L' ? EYE_L : EYE_R;
+  const lid = withLid
+    ? `<g clip-path="url(#${id}${side})"><rect class="lid" x="${cx - 11.5}" y="${EYE_Y - 11.5}" width="23" height="23.5" fill="${FUR}" stroke="#5A3A1C" stroke-width="1.2"/></g>`
+    : '';
   return `
     <g class="eye eye-${side === 'L' ? 'l' : 'r'}">
       <circle cx="${cx}" cy="${EYE_Y}" r="${EYE_R_SIZE}" fill="url(#${id}i)"/>
@@ -146,7 +150,7 @@ function openEye(id: string, side: 'L' | 'R'): string {
         <circle cx="${cx - 2.6}" cy="${EYE_Y - 3}" r="2.3" fill="#fff"/>
         <circle cx="${cx + 2.4}" cy="${EYE_Y + 3.2}" r="1" fill="#fff" opacity=".75"/>
       </g>
-      <g clip-path="url(#${id}${side})"><rect class="lid" x="${cx - 11.5}" y="${EYE_Y - 11.5}" width="23" height="23.5" fill="${FUR}" stroke="#5A3A1C" stroke-width="1.2"/></g>
+      ${lid}
       <circle cx="${cx}" cy="${EYE_Y}" r="${EYE_R_SIZE}" fill="none" stroke="#5A3A1C" stroke-width="1.3"/>
     </g>`;
 }
@@ -224,7 +228,7 @@ export function spriteMarkup(): string {
       <rect x="39" y="15.5" width="22" height="69" rx="7.5" transform="rotate(-45 50 50)"/>
     </g>
   </symbol>
-  <symbol id="cat-static" viewBox="0 0 100 100">${catBase('sc')}${openEye('sc', 'L')}${openEye('sc', 'R')}${MOUTH}</symbol>
+  <symbol id="cat-static" viewBox="0 0 100 100">${catBase('sc')}${openEye('sc', 'L', false)}${openEye('sc', 'R', false)}${MOUTH}</symbol>
   <symbol id="cat-wink" viewBox="0 0 100 100">${winkCat('wk')}</symbol>
   <symbol id="cat-head" viewBox="0 0 100 100">
     <path fill="currentColor" d="M11.5 12Q15 7 20.5 9.5L37 20.5Q50 17.5 63 20.5L79.5 9.5Q85 7 88.5 12Q92 22 91.5 37Q98.5 50 96.5 66Q93 93 50 93.5Q7 93 3.5 66Q1.5 50 8.5 37Q8 22 11.5 12Z"/>

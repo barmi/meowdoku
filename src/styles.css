@@ -67,6 +67,20 @@ button {
   margin: 0 auto;
 }
 
+.boot {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  color: var(--ink-soft);
+  font-size: 16px;
+}
+
+.sync-line {
+  margin: calc(10 * var(--px)) 0 0;
+  text-align: left;
+  line-height: 1.45;
+}
+
 .safe-probe {
   position: fixed;
   visibility: hidden;
