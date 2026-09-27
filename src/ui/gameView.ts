@@ -22,6 +22,8 @@ export interface GameHost {
 export type Mode = 'level' | 'daily';
 
 const ITEMS: ItemKey[] = ['cat', 'bulb', 'mouse'];
+/** 이 안에 같은 칸을 두 번 누르면 더블탭 */
+const DOUBLE_TAP_MS = 320;
 const ITEM_ICON: Record<ItemKey, string> = { cat: 'cat-wink', bulb: 'art-bulb', mouse: 'art-mouse' };
 export const ITEM_LABEL: Record<ItemKey, string> = { cat: '고양이 부르기', bulb: '힌트 전구', mouse: '쥐 풀기' };
 export const ITEM_DESC: Record<ItemKey, string> = {
@@ -87,6 +89,8 @@ export class GameView {
   private highlightTimer = 0;
   private cursor = -1;
   private drag: { start: number; last: number; mode: 'x' | 'erase' | null } | null = null;
+  /** 더블탭 판단용 — 직전 탭의 칸·시각·그 전 표시 */
+  private lastTap: { cell: number; at: number; prev: number } | null = null;
   private intervals: number[] = [];
   private shownScore = 0;
   private scoreRaf = 0;
@@ -414,6 +418,7 @@ export class GameView {
     const cell = this.cellAt(e.clientX, e.clientY);
     if (cell < 0 || cell === d.last) return;
     if (d.mode === null) {
+      this.lastTap = null; // 드래그는 더블탭이 아니다
       d.mode = this.game.marks[d.start] === X ? 'erase' : 'x';
       this.paint([d.start]);
     }
@@ -445,15 +450,31 @@ export class GameView {
     this.host.stats.touch(this.game.puzzle.id);
   }
 
-  private tapCell(cell: number): void {
+  /**
+   * 탭은 X 토글, 같은 칸을 빨리 두 번 누르면(더블탭) 고양이 (#7).
+   * 첫 탭은 바로 X 를 토글해서 반응이 늦지 않게 하고, 두 번째 탭이 오면 그 토글을 되돌리고 고양이를 놓는다.
+   * 키보드(Space/Enter)는 더블탭으로 치지 않는다 — 고양이는 C 키.
+   */
+  private tapCell(cell: number, allowDouble = true): void {
     if (this.game.status !== 'playing') return;
     this.touch();
     const m = this.game.marks[cell];
+    const now = performance.now();
+    const last = this.lastTap;
+    if (allowDouble && last && last.cell === cell && now - last.at < DOUBLE_TAP_MS && m !== CAT) {
+      this.lastTap = null;
+      this.game.restoreMark(cell, last.prev);
+      this.game.placeCat(cell, 'user');
+      this.lookAt(cell);
+      return;
+    }
+    this.lastTap = { cell, at: now, prev: m };
     if (m === EMPTY) {
       this.game.tap(cell);
       this.sound.mark();
     } else if (m === X) {
       this.game.tap(cell);
+      this.sound.erase();
     } else {
       const c = this.cells[cell];
       c.classList.add('happy');
@@ -490,7 +511,7 @@ export class GameView {
     if (['x', 'X', 'c', 'C', 'Backspace', 'Delete'].includes(e.key)) this.touch();
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
-      this.tapCell(this.cursor);
+      this.tapCell(this.cursor, false);
     } else if (e.key === 'x' || e.key === 'X') {
       if (this.game.marks[this.cursor] === X) this.game.clear(this.cursor);
       else this.game.tap(this.cursor);

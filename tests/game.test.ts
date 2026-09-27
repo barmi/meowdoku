@@ -29,11 +29,16 @@ describe('Game', () => {
     expect(g.marks[cell(4, 5)]).toBe(CAT);
   });
 
-  it('탭: 빈 칸 → X → 고양이(정답이면 고정, 점수)', () => {
+  it('탭은 X 토글, 고양이는 따로 놓고(정답이면 고정·점수) 고양이 칸은 탭해도 그대로 (#7)', () => {
     const g = new Game(P701());
     g.tap(cell(0, 2));
     expect(g.marks[cell(0, 2)]).toBe(X);
     g.tap(cell(0, 2));
+    expect(g.marks[cell(0, 2)]).toBe(EMPTY);
+    // 더블탭: 첫 탭의 토글을 되돌리고 고양이
+    g.tap(cell(0, 2));
+    g.restoreMark(cell(0, 2), EMPTY);
+    g.placeCat(cell(0, 2), 'user');
     expect(g.marks[cell(0, 2)]).toBe(CAT);
     expect(g.score).toBeGreaterThanOrEqual(100);
     g.tap(cell(0, 2));
@@ -44,8 +49,7 @@ describe('Game', () => {
     const g = new Game(P701());
     const ev = record(g);
     for (const c of [cell(0, 0), cell(1, 1), cell(1, 2)]) {
-      g.tap(c);
-      g.tap(c);
+      g.placeCat(c, 'user');
       expect(g.marks[c]).toBe(X);
     }
     expect(g.fish).toBe(0);
@@ -134,8 +138,7 @@ describe('Game', () => {
     const p = P701();
     const g = new Game(p);
     g.tap(cell(0, 0));
-    g.tap(cell(1, 1));
-    g.tap(cell(1, 1));
+    g.placeCat(cell(1, 1), 'user');
     const saved = JSON.parse(JSON.stringify(g.toProgress()));
     const h = new Game(p, saved);
     expect(Array.from(h.marks)).toEqual(Array.from(g.marks));

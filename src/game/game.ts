@@ -64,7 +64,7 @@ export interface MouseRun {
 
 /**
  * 게임 규칙과 점수. DOM 을 모르고 이벤트만 내보낸다.
- * - 빈 칸 탭 → X, X 탭 → 고양이. 고양이는 정답과 바로 대조한다.
+ * - 탭은 X 토글(빈 칸 ↔ X), 더블탭은 고양이. 고양이는 정답과 바로 대조한다.
  * - 틀리면 물고기(목숨) 하나를 잃고 그 칸은 X 가 된다. 맞힌 고양이는 고정된다.
  */
 export class Game {
@@ -190,12 +190,17 @@ export class Game {
     this.sinceCat += ms;
   }
 
-  /** 탭: 빈 칸 → X → 고양이 */
+  /** 탭: X 토글 (빈 칸 ↔ X). 고양이는 더블탭 → placeCat (#7) */
   tap(cell: number): void {
     if (this.status !== 'playing') return;
     const m = this.marks[cell];
     if (m === EMPTY) this.setMarks([cell], X);
-    else if (m === X) this.placeCat(cell, 'user');
+    else if (m === X) this.setMarks([cell], EMPTY);
+  }
+
+  /** 더블탭의 첫 탭이 바꾼 X 표시를 되돌린다 */
+  restoreMark(cell: number, mark: number): void {
+    if (this.status === 'playing' && (mark === EMPTY || mark === X)) this.setMarks([cell], mark);
   }
 
   /** 드래그로 여러 칸에 X 를 칠하거나 지운다 (고양이 칸은 건드리지 않음) */
