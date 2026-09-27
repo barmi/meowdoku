@@ -245,7 +245,13 @@ export class GameView {
     this.touch();
     if (dir === 'undo') this.sound.erase();
     else this.sound.mark();
-    for (const c of cells) this.replay(this.cells[c], 'flash', 450);
+    // 판이 바뀌었으니 떠 있던 힌트 창·강조는 닫는다 (#13)
+    if (this.banner.classList.contains('show')) this.hideBanner();
+    for (const c of cells) {
+      this.replay(this.cells[c], 'flash', 450);
+      const face = this.cells[c].querySelector('.catface');
+      if (face && dir === 'redo') this.replay(face as unknown as HTMLElement, 'pop', 450);
+    }
   }
 
   private updateCell(i: number, anim = ''): void {

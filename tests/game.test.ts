@@ -185,6 +185,59 @@ describe('Game', () => {
     expect(g.toProgress().history).toBeUndefined();
   });
 
+  it('힌트·고양이 아이템으로 놓은 고양이는 되돌리고 다시 놓을 수 있다, 자동 X 와 한 블록 (#13)', () => {
+    const p = P701();
+    const g = new Game(p);
+    g.autoX = true;
+    const cell0 = g.catItem()!;
+    expect(g.marks[cell0]).toBe(CAT);
+    const autoXs = [...g.marks.keys()].filter((i) => g.marks[i] === X).length;
+    expect(autoXs).toBeGreaterThan(0);
+    expect(g.canUndo()).toBe(true);
+    g.undo(); // 고양이와 자동 X 가 한 번에
+    expect(g.marks[cell0]).toBe(EMPTY);
+    expect([...g.marks].filter((m) => m === X)).toHaveLength(0);
+    expect(g.regionSolved(g.regionOf(cell0))).toBe(false);
+    g.redo();
+    expect(g.marks[cell0]).toBe(CAT);
+    // 힌트가 놓은 고양이
+    g.autoX = false;
+    let d = g.hint();
+    while (d && d.place === undefined) d = g.hint();
+    const hinted = d!.place!;
+    expect(g.marks[hinted]).toBe(CAT);
+    g.undo();
+    expect(g.marks[hinted]).not.toBe(CAT);
+    g.redo();
+    expect(g.marks[hinted]).toBe(CAT);
+    // 직접 놓은 고양이는 여전히 확정
+    const mine = cell(0, p.solution[0]);
+    if (g.marks[mine] !== CAT) {
+      g.placeCat(mine, 'user');
+      while (g.undo());
+      expect(g.marks[mine]).toBe(CAT);
+    }
+  });
+
+  it('다시 하기로 마지막 고양이가 돌아오면 클리어 (#13)', () => {
+    const p = P701();
+    const g = new Game(p);
+    p.solution.slice(0, 7).forEach((c, r) => g.placeCat(cell(r, c), 'user'));
+    const last = g.catItem()!;
+    expect(g.status).toBe('won');
+    expect(last).toBe(cell(7, p.solution[7]));
+    // 클리어 뒤에는 기록이 없다 — 대신 되돌린 뒤 다시 하기로 클리어되는지 새 판에서 확인
+    const h = new Game(p);
+    p.solution.slice(0, 6).forEach((c, r) => h.placeCat(cell(r, c), 'user'));
+    const a = h.catItem()!;
+    h.undo();
+    expect(h.marks[a]).toBe(EMPTY);
+    h.placeCat(cell(7, p.solution[7]) === a ? cell(6, p.solution[6]) : cell(7, p.solution[7]), 'user');
+    expect(h.status).toBe('playing');
+    h.redo();
+    expect(h.status).toBe('won');
+  });
+
   it('드래그: X 칠하기와 지우기, 고양이 칸은 그대로', () => {
     const g = new Game(P701());
     g.placeCat(cell(2, 3), 'user');

@@ -456,7 +456,7 @@ export class App {
           <div class="step">${demo(use('pat-sparkle') + use('mark-x'))}<div>칸을 <b>한 번</b> 누르면 X — 고양이가 없는 칸 표시. 다시 누르면 지워져요.</div></div>
           <div class="step">${demo(use('pat-sparkle') + use('cat-static'))}<div><b>두 번 빠르게</b> 누르면(더블탭) 고양이! 틀리면 화면이 흔들리고 그 칸에 빨간 X 가 남으며 물고기 한 마리를 잃어요. 물고기를 다 잃으면 게임 오버.</div></div>
           <div class="step"><div class="strip">${demo(use('mark-x')).repeat(3)}${demo('')}</div><div>누른 채로 <b>쓸면</b> 여러 칸에 X. X 에서 시작해 쓸면 지우개가 돼요.</div></div>
-          <div class="step"><div class="item-demo">${use('ico-undo')}</div><div><b>되돌리기·다시 하기</b> — X 표시와 마커를 한 번의 조작(드래그 한 번) 단위로 되돌려요. 고양이와 물고기는 되돌리지 않아요.</div></div>
+          <div class="step"><div class="item-demo">${use('ico-undo')}</div><div><b>되돌리기·다시 하기</b> — X 표시·마커와 힌트·아이템으로 놓은 고양이를 한 번의 조작(드래그 한 번) 단위로 되돌려요. 직접 놓은 고양이와 물고기는 되돌리지 않아요.</div></div>
           <div class="step">${demo(use('pat-sparkle') + use('note-2'))}<div>규칙 카드를 <b>옆으로 밀면</b> 마커 도구 — 세모·동그라미·네모·?로 생각을 표시해 두세요. 판정과는 상관없고, <b>변환</b>을 누르면 ? 를 모두 고양이로 놓아요.</div></div>
           ${itemRow('cat')}${itemRow('bulb')}${itemRow('mouse')}
         </div>`,

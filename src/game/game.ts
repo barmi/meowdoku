@@ -18,8 +18,9 @@ export type NoteShape = 1 | 2 | 3 | 4;
 export const NOTE_NAMES: Record<NoteShape, string> = { 1: '세모', 2: '동그라미', 3: '네모', 4: '물음표' };
 
 /**
- * 되돌리기 기록 (#12). 한 칸의 변화 = [칸, X표시 전, 후, 마커 전, 후], 블록 = 한 번의 조작으로 바뀐 칸들.
- * 되돌리는 대상은 X 표시와 마커뿐 — 고양이(정답·틀림)·물고기·점수는 확정된 결과라 기록하지 않는다.
+ * 되돌리기 기록 (#12). 한 칸의 변화 = [칸, 표시 전, 후, 마커 전, 후], 블록 = 한 번의 조작으로 바뀐 칸들.
+ * 되돌리는 대상은 X 표시·마커와 **힌트·아이템으로 놓은 고양이**(점수·물고기와 무관, #13).
+ * 직접 놓은 고양이(정답은 점수, 틀림은 물고기)와 물고기·점수는 확정된 결과라 기록하지 않는다.
  */
 export type Change = [number, number, number, number, number];
 type Block = Change[];
@@ -386,6 +387,7 @@ export class Game {
       if (cells.length) {
         to.push(b);
         this.emit({ type: 'history' });
+        this.checkWin();
         return cells;
       }
     }
@@ -399,7 +401,9 @@ export class Game {
     for (const [c, mb, ma, nb, na] of b) {
       const [mFrom, mTo] = dir === 'undo' ? [ma, mb] : [mb, ma];
       const [nFrom, nTo] = dir === 'undo' ? [na, nb] : [nb, na];
-      if (mFrom !== mTo && this.marks[c] === mFrom && (mTo === EMPTY || mTo === X)) {
+      // 빨간 X 는 절대 건드리지 않고, 고양이는 정답 칸일 때만 (힌트·아이템 고양이만 기록된다)
+      const allowed = mTo === EMPTY || mTo === X || (mTo === CAT && this.solutionCells.has(c));
+      if (mFrom !== mTo && this.marks[c] === mFrom && allowed) {
         this.marks[c] = mTo;
         markCells.push(c);
       }
@@ -411,6 +415,11 @@ export class Game {
     if (markCells.length) this.emit({ type: 'marks', cells: markCells });
     if (noteCells.length) this.emit({ type: 'notes', cells: noteCells });
     return [...new Set([...markCells, ...noteCells])];
+  }
+
+  /** 다시 하기로 마지막 고양이가 돌아왔으면 클리어 */
+  private checkWin(): void {
+    if (this.status === 'playing' && this.catCount() === this.n) this.win();
   }
 
   /** 고양이를 놓는다. 틀리면 물고기 -1, 칸은 빨간 X. */
@@ -437,13 +446,20 @@ export class Game {
       this.combo++;
       this.score += points;
     }
+    // 힌트·아이템 고양이는 점수·물고기와 무관 → 되돌릴 수 있게 기록 (자동 X 와 한 블록, #13)
+    const undoable = source === 'hint' || source === 'item';
+    if (undoable) {
+      this.beginBlock();
+      this.record(cell, this.marks[cell], CAT, this.notes[cell], this.notes[cell]);
+    }
     this.sinceCat = 0;
     this.marks[cell] = CAT;
     this.emit({ type: 'cat', cell, source, points });
     this.emit({ type: 'marks', cells: [cell] });
     if (points) this.emit({ type: 'score', score: this.score });
     if (this.autoX) this.autoMark(cell);
-    if (this.catCount() === this.n) this.win();
+    if (undoable) this.endBlock();
+    this.checkWin();
     return true;
   }
 
