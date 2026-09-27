@@ -1,4 +1,4 @@
-import { sizeForLevel, todayKey } from '../core/levels';
+import { difficultyOf, levelPuzzle, todayKey } from '../core/levels';
 import { COLOR_ORDER, PALETTE } from '../core/palette';
 import type { SaveData } from '../game/storage';
 import { catFace, use } from './art';
@@ -19,8 +19,10 @@ export class HomeView {
   constructor(host: HomeHost) {
     const { save } = host;
     const level = save.level;
-    const n = sizeForLevel(level);
-    const resume = save.progress.level?.id === `L${level}`;
+    const puzzle = levelPuzzle(level);
+    const n = puzzle.size;
+    const diff = difficultyOf(puzzle);
+    const resume = save.progress.level?.sig === puzzle.sig;
     const today = todayKey();
     const [, mm, dd] = today.split('-').map(Number);
     const done = save.daily[today];
@@ -45,7 +47,7 @@ export class HomeView {
             <div>
               <div class="title">${resume ? '이어서 하기' : '다음 레벨'}</div>
               <div class="big">레벨 ${level}</div>
-              <div class="meta">${n}×${n} 판 · 고양이 ${n}마리</div>
+              <div class="meta">${n}×${n} 판 · 난이도 ${'★'.repeat(diff.stars)}${'☆'.repeat(4 - diff.stars)} ${diff.label}</div>
             </div>
             <button class="link" data-act="pick">레벨 선택</button>
           </div>

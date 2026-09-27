@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { generate, givenOptions, growRegions, randomSolution } from '../src/core/generator';
 import { Geometry, neighbors4 } from '../src/core/geometry';
-import { dailyPuzzle, levelPuzzle, sizeForLevel } from '../src/core/levels';
+import { boardSpec, dailyPuzzle, difficultyOf, levelPuzzle } from '../src/core/levels';
 import { LogicEngine, TECH } from '../src/core/logic';
 import { rngFor } from '../src/core/rng';
 import { findSolutions } from '../src/core/solver';
@@ -112,13 +112,21 @@ describe('생성기', () => {
     expect(a).toEqual(b);
   });
 
-  it('레벨별 판 크기', () => {
-    expect(sizeForLevel(1)).toBe(5);
-    expect(sizeForLevel(11)).toBe(6);
-    expect(sizeForLevel(50)).toBe(7);
-    expect(sizeForLevel(200)).toBe(8);
-    expect(sizeForLevel(701)).toBe(8);
-    expect(sizeForLevel(702)).toBe(9);
+  it('판 번호가 커져도 판 크기·난이도는 랜덤이고, 같은 번호면 같은 판', () => {
+    const sizes = [...Array(300).keys()].map((k) => boardSpec(k + 1).size);
+    expect(new Set(sizes).size).toBeGreaterThanOrEqual(5);
+    // 번호가 커진다고 커지지 않는다: 앞 번호보다 작은 판이 뒤에 나온다
+    expect(sizes.some((s, i) => i > 0 && s < sizes[i - 1])).toBe(true);
+    expect(new Set(sizes.map((_, i) => boardSpec(i + 1).tier)).size).toBe(3);
+    for (const level of [1, 7, 42]) {
+      const p = levelPuzzle(level);
+      expect(p.size).toBe(boardSpec(level).size);
+      expect(p).toBe(levelPuzzle(level));
+    }
+    expect(boardSpec(701).size).toBe(8);
+    expect(boardSpec(702).size).toBe(9);
+    const labels = new Set([...Array(40).keys()].map((k) => difficultyOf(levelPuzzle(k + 1)).label));
+    expect(labels.size).toBeGreaterThanOrEqual(2);
   });
 
   it('생성된 레벨은 오픈 없이도 해가 하나라서 아무것도 열지 않는다', () => {

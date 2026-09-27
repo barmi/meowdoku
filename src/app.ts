@@ -1,4 +1,4 @@
-import { dailyPuzzle, levelPuzzle, sizeForLevel, todayKey } from './core/levels';
+import { dailyPuzzle, difficultyOf, levelPuzzle, todayKey } from './core/levels';
 import type { WinSummary } from './game/game';
 import { Sound } from './game/sound';
 import { type ItemKey, type SaveData, clearSave, defaultSave, loadSave, writeSave } from './game/storage';
@@ -71,6 +71,10 @@ export class App {
     const saved = this.save.progress.level;
     this.mount(new GameView(this, 'level', puzzle, level, saved?.sig === puzzle.sig ? saved : null));
     this.persist();
+    // 다음 판은 크기가 랜덤이라 10×10 이면 만드는 데 조금 걸린다 — 한가할 때 미리 만들어 둔다
+    const warm = () => levelPuzzle(clampLevel(level + 1));
+    if ('requestIdleCallback' in window) window.requestIdleCallback(warm, { timeout: 4000 });
+    else setTimeout(warm, 1500);
     if (!this.save.seenHelp) {
       this.save.seenHelp = true;
       this.persist();
@@ -123,14 +127,14 @@ export class App {
     this.save.items[reward]++;
     this.persist();
     const next = clampLevel(lv + 1);
-    const nextSize = sizeForLevel(next);
+    const nextPuzzle = levelPuzzle(next);
     const sheet = openSheet({
       html: `${cats}<h2>레벨 ${lv} 클리어!</h2>${table}
         <div class="reward">${use(ITEM_ICON[reward])}<span>${ITEM_LABEL[reward]} +1</span></div>`,
       dismissible: false,
       actions: [
         {
-          label: `레벨 ${next} 시작${nextSize > view.game.n ? ` · ${nextSize}×${nextSize}` : ''}`,
+          label: `레벨 ${next} 시작 · ${nextPuzzle.size}×${nextPuzzle.size} ${difficultyOf(nextPuzzle).label}`,
           kind: 'primary',
           icon: 'ico-play',
           onClick: () => this.play(next),
@@ -233,7 +237,7 @@ export class App {
     let value = this.save.level;
     const sheet = openSheet({
       html: `<h2>레벨 선택</h2>
-        <p class="hint-line">원본 스크린샷의 판은 레벨 701(8×8)과 702(9×9)예요.</p>
+        <p class="hint-line">번호마다 판 크기와 난이도가 랜덤이에요. 원본 스크린샷의 판은 701(8×8)과 702(9×9).</p>
         <div class="stepper">
           <button data-d="-10">-10</button><button data-d="-1">-1</button>
           <input type="number" inputmode="numeric" min="1" max="${MAX_LEVEL}" value="${value}" aria-label="레벨">
@@ -247,9 +251,15 @@ export class App {
     });
     const input = sheet.root.querySelector('input')!;
     const sizeLine = sheet.root.querySelector<HTMLElement>('[data-size]')!;
+    // 판을 실제로 만들어 봐야 난이도를 알 수 있다 (수 ms~0.1초) — 입력이 멈추면 계산
+    let timer = 0;
     const show = () => {
-      const n = sizeForLevel(value);
-      sizeLine.textContent = `${n}×${n} 판 · 고양이 ${n}마리`;
+      clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const p = levelPuzzle(value);
+        const d = difficultyOf(p);
+        sizeLine.textContent = `${p.size}×${p.size} 판 · 난이도 ${'★'.repeat(d.stars)}${'☆'.repeat(4 - d.stars)} ${d.label}`;
+      }, 120);
     };
     show();
     input.addEventListener('input', () => {

@@ -10,20 +10,58 @@ import type { ColorKey, Puzzle } from './types';
 const signature = (size: number, regions: number[], givens: number[]) =>
   hashSeed(`${size}|${regions.join(',')}|${givens.join(',')}`).toString(36);
 
-/** 레벨이 오를수록 판이 커진다. 701 은 스크린샷처럼 8×8, 702 는 9×9. */
-export function sizeForLevel(level: number): number {
-  if (level <= 10) return 5;
-  if (level <= 30) return 6;
-  if (level <= 100) return 7;
-  if (level <= 400) return 8;
-  if (level <= 1000) return level % 3 === 0 ? 9 : 8;
-  return [10, 8, 9][level % 3];
+/*
+ * 판 번호와 난이도는 따로 논다 (#4).
+ * - 화면·코드의 "레벨 N" 은 판 번호다 (원본 화면 표기를 그대로 따름). 1, 2, 3 … 순서대로 진행하고
+ *   같은 번호면 언제나 같은 판이다.
+ * - 판 크기와 난이도는 판 번호를 시드로 무작위로 정한다 — 번호가 커진다고 어려워지지 않는다.
+ * - 701·702 는 스크린샷 판 그대로.
+ */
+export type Tier = 'easy' | 'normal' | 'hard';
+
+const SIZE_WEIGHTS: [number, number][] = [
+  [5, 6],
+  [6, 14],
+  [7, 22],
+  [8, 30],
+  [9, 18],
+  [10, 10],
+];
+const TIER_WEIGHTS: [Tier, number][] = [
+  ['easy', 30],
+  ['normal', 40],
+  ['hard', 30],
+];
+const TIER_TECH: Record<Tier, { maxTech: number; minTech: number }> = {
+  easy: { maxTech: TECH.attack, minTech: 0 },
+  normal: { maxTech: TECH.subset, minTech: TECH.attack },
+  hard: { maxTech: TECH.contradiction, minTech: TECH.subset },
+};
+
+function weighted<T>(rng: () => number, table: [T, number][]): T {
+  let x = rng() * table.reduce((a, [, w]) => a + w, 0);
+  for (const [v, w] of table) {
+    if ((x -= w) < 0) return v;
+  }
+  return table[table.length - 1][0];
 }
 
-function difficulty(size: number): { maxTech: number; minTech: number } {
-  if (size <= 5) return { maxTech: TECH.attack, minTech: 0 };
-  if (size === 6) return { maxTech: TECH.subset, minTech: TECH.line };
-  return { maxTech: TECH.contradiction, minTech: TECH.attack };
+const boardRng = (level: number) => rngFor(`meowdoku:board:${level}`);
+
+/** 판 번호 → 판 크기와 목표 난이도 (같은 번호면 언제나 같다) */
+export function boardSpec(level: number): { size: number; tier: Tier } {
+  const h = HANDCRAFTED[level];
+  if (h) return { size: h.grid.length, tier: 'normal' };
+  const rng = boardRng(level);
+  return { size: weighted(rng, SIZE_WEIGHTS), tier: weighted(rng, TIER_WEIGHTS) };
+}
+
+/** 실제로 풀 때 필요한 기법으로 매긴 난이도 — 목표 난이도에 못 미쳐도 거짓 표시를 하지 않는다 */
+export function difficultyOf(p: Puzzle): { label: string; stars: number } {
+  if (p.tech <= TECH.line) return { label: '쉬움', stars: 1 };
+  if (p.tech === TECH.attack) return { label: '보통', stars: 2 };
+  if (p.tech === TECH.subset) return { label: '어려움', stars: 3 };
+  return { label: '아주 어려움', stars: 4 };
 }
 
 const cache = new Map<string, Puzzle>();
@@ -71,8 +109,10 @@ export function levelPuzzle(level: number): Puzzle {
   if (HANDCRAFTED[level]) {
     puzzle = fromHandcrafted(id, level);
   } else {
-    const size = sizeForLevel(level);
-    const gen = generate(rngFor(`meowdoku:level:${level}`), { size, ...difficulty(size) });
+    const rng = boardRng(level);
+    const size = weighted(rng, SIZE_WEIGHTS);
+    const tier = weighted(rng, TIER_WEIGHTS);
+    const gen = generate(rng, { size, ...TIER_TECH[tier] });
     puzzle = { id, size, ...gen, sig: signature(size, gen.regions, gen.givens) };
   }
   cache.set(id, puzzle);
