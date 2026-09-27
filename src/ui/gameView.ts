@@ -20,6 +20,7 @@ import type { Sound } from '../game/sound';
 import type { Stats } from '../game/stats';
 import type { ItemKey, SaveData } from '../game/storage';
 import { catFace, noteToolIcon, use } from './art';
+import { calmMotion } from './layout';
 import { isSheetOpen, openSheet, toast } from './overlay';
 
 export interface GameHost {
@@ -760,11 +761,13 @@ export class GameView {
 
   private blink(f: SVGElement): void {
     f.classList.add('blink');
-    setTimeout(() => f.classList.remove('blink'), 140);
+    // 동작 줄이기에서는 눈꺼풀이 천천히 내려오므로 조금 더 오래 감는다
+    setTimeout(() => f.classList.remove('blink'), calmMotion() ? 320 : 140);
   }
 
-  /** 모든 고양이가 방금 누른 칸을 쳐다본다 */
+  /** 모든 고양이가 방금 누른 칸을 쳐다본다 (동작 줄이기에서는 하지 않는다) */
   private lookAt(target: number): void {
+    if (calmMotion()) return;
     const n = this.game.n;
     for (const f of this.faces()) {
       const cell = this.cells.indexOf(f.parentElement as HTMLElement);
@@ -783,6 +786,8 @@ export class GameView {
   private eyeTick(): void {
     const faces = this.faces();
     if (!faces.length || document.hidden) return;
+    // 동작 줄이기: 세 번에 한 번만 (눈은 CSS 에서 천천히 움직인다)
+    if (calmMotion() && Math.random() < 2 / 3) return;
     const f = faces[Math.floor(Math.random() * faces.length)];
     const r = Math.random();
     if (r < 0.45) this.blink(f);

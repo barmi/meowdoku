@@ -1911,11 +1911,65 @@ button {
   white-space: nowrap;
 }
 
+/*
+ * 동작 줄이기 (#14): 움직임을 줄이되 순간 이동은 없게 한다.
+ * 모든 시간을 0.01ms 로 덮으면 눈이 순간 이동해 움찔거리고, 무한 반복 애니메이션은 프레임마다 돈다.
+ */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
+  /* 튀고·흔들리고·반복하는 애니메이션은 끈다 */
+  .logo .big-cat .catface,
+  .cat-row svg,
+  .runner svg,
+  .cell .catface.pop,
+  .cell .catface.drop,
+  .cell .catface.angry,
+  .cell.happy .catface,
+  .cell.wrong,
+  .cell.nope,
+  .game.quake,
+  .fish.born,
+  .sheet,
+  .badge.bump,
+  .cell.focus::after,
+  .cell.target::after {
+    animation: none !important;
+  }
+
+  .confetti {
+    display: none;
+  }
+
+  /* 점수는 떠오르지 않고 제자리에서 사라진다 */
+  .points {
+    animation-name: fade-out !important;
+  }
+
+  /* 틀렸을 때: 흔들림 대신 판 테두리를 잠깐 빨갛게 (움직임 없이) */
+  .board-wrap.hit {
+    animation: none !important;
+    box-shadow: 0 0 0 calc(3 * var(--px)) #e8322f, 0 0 calc(24 * var(--px)) rgba(232, 50, 47, 0.55);
+  }
+
+  /* 규칙 카드는 밀리지 않고 바로 바뀐다 */
+  .track.anim {
+    transition: none;
+  }
+
+  /* 물고기는 날아가지 않고 사라진다 */
+  .fish {
+    transition: opacity 0.3s, width 0.3s 0.2s, margin 0.3s 0.2s;
+  }
+
+  .fish.gone {
+    transform: none;
+  }
+
+  /* 눈은 더 천천히 부드럽게 (JS 쪽에서 더 드물게 움직인다) */
+  .catface .pupil {
+    transition-duration: 0.7s;
+  }
+
+  .catface .lid {
+    transition-duration: 0.2s;
   }
 }

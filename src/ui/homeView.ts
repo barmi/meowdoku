@@ -3,6 +3,7 @@ import { COLOR_ORDER, PALETTE } from '../core/palette';
 import type { Stats } from '../game/stats';
 import type { SaveData } from '../game/storage';
 import { catFace, use } from './art';
+import { calmMotion } from './layout';
 import { fmtDuration, fmtNum } from './format';
 
 export interface HomeHost {
@@ -96,6 +97,7 @@ export class HomeView {
     const face = this.root.querySelector<SVGElement>('.big-cat .catface')!;
     const moods = ['look-l', 'look-r', 'look-u', 'blink', 'blink', 'smug'];
     this.timer = window.setInterval(() => {
+      if (calmMotion() && Math.random() < 2 / 3) return; // 동작 줄이기 (#14)
       const m = moods[Math.floor(Math.random() * moods.length)];
       face.classList.add(m);
       setTimeout(() => face.classList.remove(m), m === 'blink' ? 140 : 1300);

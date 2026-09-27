@@ -29,3 +29,12 @@ export function watchLayout(): void {
   window.visualViewport?.addEventListener('resize', again);
   window.addEventListener('orientationchange', again);
 }
+
+/** 기기 설정의 "동작 줄이기" — 켜져 있으면 고양이 눈을 더 드물게, 탭마다 쳐다보는 동작은 끈다 (#14) */
+export function calmMotion(): boolean {
+  try {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+}
