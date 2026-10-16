@@ -704,6 +704,7 @@ export class GameView {
       if (this.destroyed) return;
       if (i >= cells.length || this.game.status !== 'playing') {
         this.busy = false;
+        this.selectTool(null);
         this.updateHistory();
         if (this.game.status === 'playing') toast(bad ? `고양이 ${ok}마리 · 틀린 자리 ${bad}곳` : `? ${ok}개를 고양이로 바꿨어요`);
         return;
