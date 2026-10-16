@@ -10,6 +10,7 @@ import {
   type MouseRun,
   NOTE_NAMES,
   NOTE_NONE,
+  NOTE_QUESTION,
   type NoteShape,
   type Progress,
   type WinSummary,
@@ -123,6 +124,8 @@ export class GameView {
   private touched = false;
   /** 다른 기기의 상태로 바뀌어 버려지는 화면 — 닫을 때 저장하지 않는다 */
   private discarded = false;
+  /** 이번 화면에서 가장 먼저 놓은 '?' — 뒤에 더 앞쪽 칸을 표시해도 바뀌지 않는다. */
+  private firstQuestion = -1;
 
   constructor(host: GameHost, mode: Mode, puzzle: Puzzle, level: number, saved?: Progress | null) {
     this.host = host;
@@ -282,10 +285,16 @@ export class GameView {
     el.setAttribute('aria-label', `${Math.floor(i / n) + 1}행 ${(i % n) + 1}열 ${name} 영역, ${state}`);
   }
 
-  /** 변환 순서(위→아래, 왼→오른)의 첫 '?'만 빨간색으로 표시한다 (#15). */
-  private refreshFirstQuestion(): void {
-    const first = this.game.questionCells()[0] ?? -1;
-    for (let i = 0; i < this.cells.length; i++) this.cells[i].classList.toggle('first-question', i === first);
+  /** 이번 화면에서 가장 먼저 놓은 '?'만 빨간색으로 표시한다 (#15). */
+  private refreshFirstQuestion(changed: number[] = []): void {
+    const questions = this.game.questionCells();
+    if (!questions.includes(this.firstQuestion)) {
+      this.firstQuestion =
+        changed.find((cell) => questions.includes(cell) && this.game.notes[cell] === NOTE_QUESTION) ??
+        questions[0] ??
+        -1;
+    }
+    for (let i = 0; i < this.cells.length; i++) this.cells[i].classList.toggle('first-question', i === this.firstQuestion);
   }
 
   private refreshHeads(): void {
@@ -345,7 +354,7 @@ export class GameView {
         break;
       case 'notes':
         for (const c of e.cells) this.updateCell(c);
-        this.refreshFirstQuestion();
+        this.refreshFirstQuestion(e.cells);
         break;
       case 'cat':
         if (e.source === 'user') this.host.stats.cat();
@@ -680,7 +689,10 @@ export class GameView {
   /** 보이는 '?' 마커를 하나씩 고양이로 놓는다 — 틀리면 평소처럼 물고기를 잃고, 게임이 끝나면 멈춘다 (#11) */
   private convertQuestions(): void {
     if (this.busy || this.game.status !== 'playing') return;
-    const cells = this.game.questionCells();
+    const questions = this.game.questionCells();
+    const cells = questions.includes(this.firstQuestion)
+      ? [this.firstQuestion, ...questions.filter((cell) => cell !== this.firstQuestion)]
+      : questions;
     if (!cells.length) return toast('변환할 ? 마커가 없어요');
     this.busy = true;
     this.updateHistory();

@@ -193,11 +193,11 @@ export const NOTE_SHAPES: Record<number, string> = {
   4: '<path d="M36.5 37C36.5 28 43 22.5 50.5 22.5S64 27.5 64 36C64 46 51 47 51 59"/><circle cx="51" cy="74.5" r="1.8"/>',
 };
 
-/** 어느 칸 색에서도 보이게: 어두운 반투명 테두리 위에 흰 선 */
+/** 어느 칸 색에서도 보이게: 어두운 반투명 테두리 위에 흰 선. 판에서는 CSS 변수로 색을 바꿀 수 있다. */
 function noteShape(inner: string): string {
   return `<g fill="none" stroke-linejoin="round" stroke-linecap="round">
-    <g stroke="rgba(60,30,20,.42)" stroke-width="12.5">${inner}</g>
-    <g stroke="#fff" stroke-width="7">${inner}</g>
+    <g stroke="var(--note-outline,rgba(60,30,20,.42))" stroke-width="12.5">${inner}</g>
+    <g stroke="var(--note-stroke,#fff)" stroke-width="7">${inner}</g>
   </g>`;
 }
 

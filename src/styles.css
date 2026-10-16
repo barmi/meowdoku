@@ -574,9 +574,10 @@ button {
   transform: none;
 }
 
-/* '?' 변환 때 가장 먼저 처리될 마커 (#15) */
+/* 첫 번째 '?' 마커: SVG symbol의 실제 선 색상을 바꾼다 (#15) */
 .cell.first-question .nt {
-  color: var(--red);
+  --note-outline: rgba(95, 0, 0, 0.55);
+  --note-stroke: var(--red);
 }
 
 /* 마커 모드: 판 둘레 점선 — 탭이 X·고양이가 아니라 마커로 간다 */
