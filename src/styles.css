@@ -574,6 +574,11 @@ button {
   transform: none;
 }
 
+/* '?' 변환 때 가장 먼저 처리될 마커 (#15) */
+.cell.first-question .nt {
+  color: var(--red);
+}
+
 /* 마커 모드: 판 둘레 점선 — 탭이 X·고양이가 아니라 마커로 간다 */
 .board-wrap.marking {
   outline: calc(2.5 * var(--px)) dashed #f4873f;

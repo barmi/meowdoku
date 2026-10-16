@@ -13,6 +13,8 @@ import { watchLayout } from './ui/layout';
 import { confetti, openSheet, toast } from './ui/overlay';
 
 const MAX_LEVEL = 9999;
+/** 빠른 연속 조작을 한 번의 작은 변경분 전송으로 묶는다 (#15). 화면을 떠날 때는 즉시 보낸다. */
+export const PUSH_DEBOUNCE_MS = 1200;
 const ITEM_ICON: Record<ItemKey, string> = { cat: 'cat-wink', bulb: 'art-bulb', mouse: 'art-mouse' };
 
 const fmtTime = (ms: number) => {
@@ -111,7 +113,7 @@ export class App {
     if (push && this.sync.dirty) this.schedulePush();
   }
 
-  private schedulePush(delay = 300): void {
+  private schedulePush(delay = PUSH_DEBOUNCE_MS): void {
     clearTimeout(this.pushTimer);
     this.pushTimer = window.setTimeout(() => void this.pushNow(), delay);
   }
@@ -131,7 +133,7 @@ export class App {
     this.pushing = true;
     try {
       const snapshot = JSON.parse(JSON.stringify(this.save)) as SaveData;
-      const res = await this.sync.push(snapshot);
+      const res = await this.sync.push(snapshot, force);
       if (res.status === 'conflict') {
         this.pushAgain = false;
         this.reconcile(res.remote);

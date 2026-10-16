@@ -9,6 +9,7 @@ import { defaultSave } from '../src/game/storage';
 import { merge3, standingOf } from '../src/game/merge';
 import { emptyDay } from '../src/game/stats';
 import { SyncClient } from '../src/game/sync';
+import { applyMergePatch, createMergePatch } from '../src/game/syncPatch';
 
 let server: Server;
 let base = '';
@@ -53,6 +54,21 @@ describe('서버 저장소 /api/state', () => {
     expect(JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8')).data.level).toBe(6);
   });
 
+  it('변경분만 합쳐 저장하고, 같은 rev 조회는 본문 없는 204로 끝낸다', async () => {
+    const current = (await (await api()).json()) as { rev: number; data: { level: number; settings?: { sound: boolean } } };
+    const patched = await put({ baseRev: current.rev, patch: { level: 17, settings: { sound: false } } });
+    expect(patched.status).toBe(200);
+    const rev = ((await patched.json()) as { rev: number }).rev;
+
+    const unchanged = await fetch(`${base}api/state?rev=${rev}`);
+    expect(unchanged.status).toBe(204);
+    expect(await unchanged.text()).toBe('');
+
+    const saved = (await (await api()).json()) as { data: { level: number; settings: { sound: boolean } } };
+    expect(saved.data.level).toBe(17);
+    expect(saved.data.settings.sound).toBe(false);
+  });
+
   it('잘못된 요청은 거절하고, 다른 경로는 넘긴다', async () => {
     expect((await api({ method: 'PUT', body: '{nope' })).status).toBe(400);
     expect((await put({ data: { v: 1 } })).status).toBe(400);
@@ -61,7 +77,68 @@ describe('서버 저장소 /api/state', () => {
   });
 });
 
+describe('동기화 변경분', () => {
+  it('객체 변경·키 삭제를 JSON Merge Patch로 왕복한다', () => {
+    const before = { level: 3, settings: { sound: true, vibrate: true }, progress: { level: { marks: '0000' } } };
+    const after = { level: 4, settings: { sound: false, vibrate: true }, progress: {} };
+    const patch = createMergePatch(before, after);
+    expect(patch).toEqual({ level: 4, settings: { sound: false }, progress: { level: null } });
+    expect(applyMergePatch(before, patch)).toEqual(after);
+    expect(createMergePatch(after, after)).toBeUndefined();
+  });
+
+  it('누적 기록이 큰 저장본에서는 전체 상태보다 변경분 본문이 작다', () => {
+    const before = defaultSave();
+    for (let d = 1; d <= 30; d++) {
+      before.stats[`2026-09-${String(d).padStart(2, '0')}`] = {
+        ...emptyDay(),
+        boards: Array.from({ length: 8 }, (_, i) => `L${d * 10 + i}`),
+      };
+    }
+    before.progress.level = {
+      id: 'L42',
+      gameId: 'g1',
+      sig: 's',
+      marks: '0'.repeat(100),
+      fish: 3,
+      score: 0,
+      combo: 0,
+      mistakes: 0,
+      elapsed: 1000,
+      sinceCat: 1000,
+      continued: false,
+      status: 'playing',
+    };
+    const after = JSON.parse(JSON.stringify(before));
+    after.progress.level.marks = `1${'0'.repeat(99)}`;
+    after.progress.level.elapsed = 1400;
+    after.progress.level.history = { u: [[0, 0, 1, 0, 0]], r: [] };
+    const full = JSON.stringify({ baseRev: 7, data: after }).length;
+    const delta = JSON.stringify({ baseRev: 7, patch: createMergePatch(before, after) }).length;
+    expect(delta).toBeLessThan(full * 0.1);
+  });
+});
+
 describe('기기 사이 이어하기', () => {
+  it('첫 저장은 전체 상태, 다음 저장은 변경분으로 보내도 서버 상태가 온전히 유지된다', async () => {
+    const client = new SyncClient(base);
+    const remote = await client.fetchRemote();
+    expect(remote?.data).not.toBeNull();
+    client.rev = remote!.rev;
+    client.setBase(remote!.data!);
+
+    const full = { ...defaultSave(), level: 21 };
+    expect((await client.push(full, true)).status).toBe('ok');
+    const changed = JSON.parse(JSON.stringify(full));
+    changed.settings.vibrate = false;
+    expect((await client.push(changed)).status).toBe('ok');
+
+    const stored = (await (await api()).json()) as { data: typeof changed };
+    expect(stored.data.level).toBe(21);
+    expect(stored.data.settings).toEqual({ sound: true, vibrate: false, autoX: false });
+    expect(stored.data.items).toEqual(full.items);
+  });
+
   it('두 기기: 먼저 저장한 쪽이 이기고, 늦은 쪽은 충돌로 최신 상태를 받는다', async () => {
     const phone = new SyncClient(base);
     const desk = new SyncClient(base);

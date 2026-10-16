@@ -1,4 +1,5 @@
 import { type SaveData, normalizeSave } from './storage';
+import { createMergePatch } from './syncPatch';
 
 /**
  * 서버(/api/state)와 게임 상태를 맞춘다 (#6).
@@ -73,7 +74,15 @@ export class SyncClient {
 
   async fetchRemote(ms = 2500): Promise<Remote | null> {
     try {
-      const res = await fetch(this.url, { cache: 'no-store', signal: timeout(ms) });
+      const url = new URL(this.url);
+      // 기준 상태가 있을 때만 조건부 조회한다. 서버 rev가 그대로면 큰 저장 본문을 다시 받지 않는다.
+      if (this.base && this.rev > 0) url.searchParams.set('rev', String(this.rev));
+      const res = await fetch(url, { cache: 'no-store', signal: timeout(ms) });
+      if (res.status === 204) {
+        this.available = true;
+        this.online = true;
+        return { rev: this.rev, updatedAt: this.syncedAt, data: this.base };
+      }
       if (!res.ok) throw new Error(String(res.status));
       const body = (await res.json()) as { rev?: unknown; updatedAt?: unknown; data?: unknown };
       if (typeof body.rev !== 'number') throw new Error('not a state api');
@@ -86,8 +95,18 @@ export class SyncClient {
     }
   }
 
-  async push(data: SaveData): Promise<PushResult> {
-    const body = JSON.stringify({ baseRev: this.rev, data });
+  async push(data: SaveData, forceFull = false): Promise<PushResult> {
+    const patch = this.base ? createMergePatch(this.base, data) : undefined;
+    if (!forceFull && this.base && patch === undefined) {
+      this.dirty = false;
+      this.online = true;
+      this.saveMeta();
+      return { status: 'ok', rev: this.rev };
+    }
+    // 첫 저장은 전체 상태. 이후에는 변경분이 더 작을 때만 patch를 써서 어떤 변경도 예전보다 커지지 않게 한다.
+    const fullBody = JSON.stringify({ baseRev: this.rev, data });
+    const patchBody = this.base && patch !== undefined ? JSON.stringify({ baseRev: this.rev, patch }) : '';
+    const body = !forceFull && patchBody && patchBody.length < fullBody.length ? patchBody : fullBody;
     try {
       const res = await fetch(this.url, {
         method: 'PUT',

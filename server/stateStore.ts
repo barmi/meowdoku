@@ -1,12 +1,14 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { dirname, resolve } from 'node:path';
+import { applyMergePatch } from '../src/game/syncPatch.ts';
 
 /**
  * 기기 사이에 게임 상태를 나누는 아주 작은 저장소 (#6).
  *
  * - GET /api/state → { rev, updatedAt, data }   (아직 없으면 rev 0, data null)
- * - PUT /api/state ← { baseRev, data }
+ *   GET /api/state?rev=N 에서 N이 최신이면 본문 없는 204
+ * - PUT /api/state ← 첫 저장은 { baseRev, data }, 이후는 { baseRev, patch }
  *     baseRev 가 서버 rev 와 같을 때만 저장하고 rev+1 → 200 { rev, updatedAt }
  *     다르면(다른 기기가 먼저 저장) → 409 와 서버 최신 상태
  *
@@ -51,12 +53,23 @@ export function createStateHandler(file = defaultStateFile()) {
   };
 
   return (req: IncomingMessage, res: ServerResponse, next?: () => void): void => {
-    const path = (req.url ?? '').split('?')[0];
+    const url = new URL(req.url ?? '/', 'http://localhost');
+    const path = url.pathname;
     if (!path.endsWith('/api/state')) {
       next?.();
       return;
     }
-    if (req.method === 'GET') return send(res, 200, read());
+    if (req.method === 'GET') {
+      const cur = read();
+      const clientRev = url.searchParams.get('rev');
+      if (clientRev !== null && /^\d+$/.test(clientRev) && Number(clientRev) === cur.rev) {
+        res.statusCode = 204;
+        res.setHeader('Cache-Control', 'no-store');
+        res.end();
+        return;
+      }
+      return send(res, 200, cur);
+    }
     if (req.method !== 'PUT' && req.method !== 'POST') return send(res, 405, { error: 'method not allowed' });
 
     const chunks: Buffer[] = [];
@@ -72,18 +85,27 @@ export function createStateHandler(file = defaultStateFile()) {
     });
     req.on('end', () => {
       if (aborted) return;
-      let msg: { baseRev?: unknown; data?: unknown };
+      let msg: { baseRev?: unknown; data?: unknown; patch?: unknown };
       try {
         msg = JSON.parse(Buffer.concat(chunks).toString('utf8'));
       } catch {
         return send(res, 400, { error: 'bad json' });
       }
-      if (typeof msg.baseRev !== 'number' || typeof msg.data !== 'object' || msg.data === null) {
-        return send(res, 400, { error: 'baseRev and data required' });
+      const hasData = Object.prototype.hasOwnProperty.call(msg, 'data');
+      const hasPatch = Object.prototype.hasOwnProperty.call(msg, 'patch');
+      if (
+        typeof msg.baseRev !== 'number' ||
+        hasData === hasPatch ||
+        (hasData && (typeof msg.data !== 'object' || msg.data === null || Array.isArray(msg.data))) ||
+        (hasPatch && (typeof msg.patch !== 'object' || msg.patch === null || Array.isArray(msg.patch)))
+      ) {
+        return send(res, 400, { error: 'baseRev and exactly one of data or patch required' });
       }
       const cur = read();
       if (msg.baseRev !== cur.rev) return send(res, 409, cur);
-      const next: StoredState = { rev: cur.rev + 1, updatedAt: Date.now(), data: msg.data };
+      const data = hasData ? msg.data : applyMergePatch(cur.data, msg.patch);
+      if (typeof data !== 'object' || data === null || Array.isArray(data)) return send(res, 400, { error: 'invalid state' });
+      const next: StoredState = { rev: cur.rev + 1, updatedAt: Date.now(), data };
       write(next);
       send(res, 200, { rev: next.rev, updatedAt: next.updatedAt });
     });

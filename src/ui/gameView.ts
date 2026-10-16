@@ -223,6 +223,7 @@ export class GameView {
     for (const h of this.root.querySelectorAll<HTMLElement>('.head')) this.heads.set(Number(h.dataset.region), h);
 
     for (let i = 0; i < this.cells.length; i++) this.updateCell(i);
+    this.refreshFirstQuestion();
     this.refreshHeads();
     this.fishEls.forEach((f, i) => f.classList.toggle('gone', i >= this.game.fish));
     this.shownScore = this.game.score;
@@ -281,6 +282,12 @@ export class GameView {
     el.setAttribute('aria-label', `${Math.floor(i / n) + 1}행 ${(i % n) + 1}열 ${name} 영역, ${state}`);
   }
 
+  /** 변환 순서(위→아래, 왼→오른)의 첫 '?'만 빨간색으로 표시한다 (#15). */
+  private refreshFirstQuestion(): void {
+    const first = this.game.questionCells()[0] ?? -1;
+    for (let i = 0; i < this.cells.length; i++) this.cells[i].classList.toggle('first-question', i === first);
+  }
+
   private refreshHeads(): void {
     for (const [k, h] of this.heads) h.classList.toggle('found', this.game.regionSolved(k));
   }
@@ -333,10 +340,12 @@ export class GameView {
     switch (e.type) {
       case 'marks':
         for (const c of e.cells) this.updateCell(c);
+        this.refreshFirstQuestion();
         this.refreshHeads();
         break;
       case 'notes':
         for (const c of e.cells) this.updateCell(c);
+        this.refreshFirstQuestion();
         break;
       case 'cat':
         if (e.source === 'user') this.host.stats.cat();
@@ -697,6 +706,7 @@ export class GameView {
 
   private clearNotes(): void {
     const n = this.game.clearNotes();
+    this.selectTool(null);
     toast(n ? `마커 ${n}개를 모두 지웠어요` : '지울 마커가 없어요');
     if (n) this.sound.erase();
   }
