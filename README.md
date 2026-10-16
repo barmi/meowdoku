@@ -3,6 +3,8 @@
 고양이 퀸즈(Queens / Star Battle) 퍼즐 웹게임. 모바일 게임 스크린샷을 기준으로 화면 구성·색·치수를
 최대한 비슷하게 옮겼다. 그림은 원본 이미지를 쓰지 않고 전부 SVG 로 새로 그렸다.
 
+**바로 실행:** [https://barmi.github.io/meowdoku/](https://barmi.github.io/meowdoku/)
+
 ## 규칙
 
 - **색깔당 고양이 1마리** — 색깔 영역마다 고양이가 딱 한 마리
