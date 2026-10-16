@@ -1,5 +1,6 @@
 import type { Progress } from './game';
 import type { DayStats } from './stats';
+import { SAVE_STORAGE_KEY } from '../storageMode';
 
 export interface Settings {
   sound: boolean;
@@ -30,8 +31,6 @@ export interface SaveData {
   /** 끝낸(클리어한) 판의 gameId — 다른 기기에서 이미 끝난 판을 이어가려는지 가려낸다 (#6) */
   finished: string[];
 }
-
-const KEY = 'meowdoku.save.v1';
 
 export function defaultSave(): SaveData {
   return {
@@ -72,7 +71,7 @@ export function normalizeSave(raw: unknown): SaveData | null {
 /** localStorage 는 사생활 보호 모드 등에서 막힐 수 있다 — 실패해도 게임은 돈다 */
 export function loadSave(): SaveData {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(SAVE_STORAGE_KEY);
     return (raw && normalizeSave(JSON.parse(raw))) || defaultSave();
   } catch {
     return defaultSave();
@@ -81,7 +80,7 @@ export function loadSave(): SaveData {
 
 export function writeSave(data: SaveData): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify(data));
+    localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(data));
   } catch {
     /* 저장 불가 — 무시 */
   }
@@ -89,7 +88,7 @@ export function writeSave(data: SaveData): void {
 
 export function clearSave(): void {
   try {
-    localStorage.removeItem(KEY);
+    localStorage.removeItem(SAVE_STORAGE_KEY);
   } catch {
     /* 무시 */
   }

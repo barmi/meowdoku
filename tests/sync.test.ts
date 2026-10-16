@@ -3,12 +3,13 @@ import { type Server, createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createStateHandler } from '../server/stateStore';
 import { defaultSave } from '../src/game/storage';
 import { merge3, standingOf } from '../src/game/merge';
 import { emptyDay } from '../src/game/stats';
 import { SyncClient } from '../src/game/sync';
+import { SyncClient as BrowserSyncClient } from '../src/game/syncBrowser';
 import { applyMergePatch, createMergePatch } from '../src/game/syncPatch';
 
 let server: Server;
@@ -120,6 +121,16 @@ describe('동기화 변경분', () => {
 });
 
 describe('기기 사이 이어하기', () => {
+  it('브라우저 전용 모드에서는 서버 조회와 저장 요청을 전혀 보내지 않는다 (#16)', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const browserOnly = new BrowserSyncClient();
+    expect(browserOnly.enabled).toBe(false);
+    expect(await browserOnly.fetchRemote()).toBeNull();
+    expect(await browserOnly.push(defaultSave())).toEqual({ status: 'disabled' });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
   it('첫 저장은 전체 상태, 다음 저장은 변경분으로 보내도 서버 상태가 온전히 유지된다', async () => {
     const client = new SyncClient(base);
     const remote = await client.fetchRemote();

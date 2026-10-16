@@ -5,7 +5,8 @@ import { Sound } from './game/sound';
 import { Stats } from './game/stats';
 import { type ItemKey, type SaveData, clearSave, defaultSave, loadSave, writeSave } from './game/storage';
 import { merge3, standingOf } from './game/merge';
-import { type Remote, SyncClient } from './game/sync';
+import { type Remote, SyncClient } from '@sync-client';
+import { SERVER_STORAGE_ENABLED, STORAGE_MODE } from './storageMode';
 import { spriteMarkup, use } from './ui/art';
 import { GameView, ITEM_DESC, ITEM_LABEL } from './ui/gameView';
 import { HomeView } from './ui/homeView';
@@ -29,7 +30,7 @@ export class App {
   save: SaveData = loadSave();
   readonly sound = new Sound();
   readonly stats = new Stats(this);
-  readonly sync = new SyncClient();
+  readonly sync = new SyncClient(document.baseURI, SERVER_STORAGE_ENABLED);
   private readonly root: HTMLElement;
   private view: GameView | HomeView | StatsView | null = null;
   private pushTimer = 0;
@@ -367,12 +368,14 @@ export class App {
   }
 
   private syncLine(): string {
-    if (!this.sync.available) return '저장: 이 기기에만 (서버 저장 API 없음)';
+    if (STORAGE_MODE === 'browser') return '저장 모드: 브라우저 전용 · 이 브라우저에만 저장 · 서버 전송 없음';
     const at = this.sync.syncedAt
       ? new Date(this.sync.syncedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
       : '-';
-    if (!this.sync.online) return `저장: 서버에 연결 안 됨 — 이 기기에 저장해 두고 연결되면 올려요 (마지막 동기화 ${at})`;
-    return `저장: 서버와 동기화됨 · 마지막 저장 ${at}${this.sync.dirty ? ' · 올리는 중' : ''}`;
+    if (!this.sync.available || !this.sync.online) {
+      return `저장 모드: 개인 서버 동기화 · 서버 연결 안 됨 — 이 기기에 보관 중 (마지막 동기화 ${at})`;
+    }
+    return `저장 모드: 개인 서버 동기화 · 마지막 저장 ${at}${this.sync.dirty ? ' · 올리는 중' : ''}`;
   }
 
   openSettings(view?: GameView): void {

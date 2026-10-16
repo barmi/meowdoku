@@ -15,7 +15,8 @@ export interface Remote {
 export type PushResult =
   | { status: 'ok'; rev: number }
   | { status: 'conflict'; remote: Remote }
-  | { status: 'offline' };
+  | { status: 'offline' }
+  | { status: 'disabled' };
 
 const META_KEY = 'meowdoku.sync.v1';
 const BASE_KEY = 'meowdoku.sync.base.v1';
@@ -26,7 +27,9 @@ function timeout(ms: number): AbortSignal | undefined {
 }
 
 export class SyncClient {
-  private readonly url: string;
+  private readonly url: string | null;
+  /** browser 모드에서는 false — 어떤 서버 저장 요청도 보내지 않는다 (#16). */
+  readonly enabled: boolean;
   /** 이 기기가 마지막으로 맞춘 서버 rev */
   rev = 0;
   /** 서버에 아직 못 올린 변경이 있다 */
@@ -40,8 +43,10 @@ export class SyncClient {
   /** 마지막으로 서버와 맞춘 상태 (rev 시점) — 두 기기의 변경을 합치는 기준 */
   base: SaveData | null = null;
 
-  constructor(base: string = document.baseURI) {
-    this.url = new URL('api/state', base).toString();
+  constructor(base: string = document.baseURI, enabled = true) {
+    this.enabled = enabled;
+    this.url = enabled ? new URL('api/state', base).toString() : null;
+    if (!enabled) return;
     try {
       const m = JSON.parse(localStorage.getItem(META_KEY) ?? 'null') as Partial<SyncClient> | null;
       if (m) {
@@ -73,6 +78,7 @@ export class SyncClient {
   }
 
   async fetchRemote(ms = 2500): Promise<Remote | null> {
+    if (!this.enabled || !this.url) return null;
     try {
       const url = new URL(this.url);
       // 기준 상태가 있을 때만 조건부 조회한다. 서버 rev가 그대로면 큰 저장 본문을 다시 받지 않는다.
@@ -96,6 +102,7 @@ export class SyncClient {
   }
 
   async push(data: SaveData, forceFull = false): Promise<PushResult> {
+    if (!this.enabled || !this.url) return { status: 'disabled' };
     const patch = this.base ? createMergePatch(this.base, data) : undefined;
     if (!forceFull && this.base && patch === undefined) {
       this.dirty = false;

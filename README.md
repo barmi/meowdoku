@@ -106,15 +106,25 @@ npm install
 
 npm run dev      # 개발 서버 http://localhost:5173 (0.0.0.0 로 열림 — 같은 네트워크의 폰에서 Network 주소로 접속)
 npm test         # 퍼즐 생성기·풀이기·게임 규칙 테스트
-npm run build    # 타입 검사 + dist/ 에 정적 빌드
+npm run build    # 개인 서버 저장 모드(기본)로 타입 검사 + dist/ 빌드
 npm run serve    # 빌드 후 http://localhost:4173 로 서빙 (0.0.0.0)
 ```
 
-`dist/` 는 상대 경로(`base: './'`)로 빌드되므로 아무 정적 서버로 서빙해도 된다
-(단, 정적 서버에는 아래 저장 API 가 없어서 기기별 저장으로만 동작한다).
+저장 방식은 빌드할 때 명시적으로 나눈다 (#16). 두 모드는 서로의 저장소를 사용하지 않는다.
+
+| 빌드 모드 | 명령/환경 | 저장 방식 |
+| --- | --- | --- |
+| 개인 서버(기본) | `npm run dev`, `npm run build`, `npm run serve` | `meowdoku.save.v1` + 이 PC의 `/api/state` |
+| 브라우저 전용 | `MEOWDOKU_STORAGE_MODE=browser npm run build` | `meowdoku.browser.save.v1`만 사용, 서버 요청 없음 |
+
+GitHub Pages workflow는 항상 **브라우저 전용** 모드로 빌드한다. 반대로 로컬 PC 배포는 기본값인
+**개인 서버** 모드를 유지한다. 현재 모드는 설정 화면에 표시된다.
+
+`dist/` 는 상대 경로(`base: './'`)로 빌드되므로 정적 서버로 서빙할 수 있다. 정적 배포에는 반드시
+브라우저 전용 모드를 사용한다.
 
 ```bash
-npm run build && python3 -m http.server 8080 -d dist
+MEOWDOKU_STORAGE_MODE=browser npm run build && python3 -m http.server 8080 -d dist
 ```
 
 폰(iPhone Safari)에서 열고 "홈 화면에 추가" 하면 주소창 없이 앱처럼 전체 화면으로 뜬다
@@ -131,12 +141,13 @@ npm run build && python3 -m http.server 8080 -d dist
 | `/?home` | 홈 화면 |
 | `/?stats` | 하루 통계 |
 
-진행 상태·설정·아이템·통계는 브라우저 `localStorage`(`meowdoku.save.v1`)에 저장되고, 서버가 저장 API 를
-갖고 있으면 서버에도 저장해서 **어느 기기에서 열어도 이어서 한다** (아래).
+진행 상태·설정·아이템·통계는 항상 브라우저 `localStorage`에 저장된다. 개인 서버와 브라우저 전용 모드는
+키도 서로 달라 같은 주소에 번갈아 배포하더라도 데이터를 침범하지 않는다. 개인 서버 모드에서만 서버에도
+저장해 **어느 기기에서 열어도 이어서 한다** (아래). 브라우저 전용 모드는 `/api/state`를 조회하거나 저장하지 않는다.
 
 ## 기기 사이 이어하기 (#6)
 
-`npm run dev`·`npm run serve` 서버에는 게임 상태 저장 API(`/api/state`)가 붙어 있다
+기본 개인 서버 모드의 `npm run dev`·`npm run serve`에는 게임 상태 저장 API(`/api/state`)가 붙어 있다
 (`server/stateStore.ts`, Vite 플러그인). 상태는 서버 디스크의 JSON 파일 하나에 통째로 저장된다.
 
 | 항목 | 값 |
@@ -157,6 +168,7 @@ npm run build && python3 -m http.server 8080 -d dist
 - 서버에 닿지 않으면 이 기기에만 저장하고, 다시 연결되면 맞춘다. 설정 화면에 저장 상태가 보인다.
 - 인증이 없으니 믿을 수 있는 네트워크(LAN·Tailscale)에서만 연다. 처음부터 다시 하려면 서버를 끄고
   `data/state.json` 을 지우거나, 설정의 "기록 초기화"(서버의 공유 상태도 초기화된다).
+- GitHub Pages 빌드에는 이 API가 포함되지 않으며, 현재 개인 서버의 주소나 상태 파일도 참조하지 않는다.
 
 ## 레벨(판 번호)과 난이도
 
