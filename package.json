@@ -1,7 +1,7 @@
 {
   "name": "meowdoku",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "고양이 퀸즈 퍼즐 웹게임 — 색깔·행·열마다 고양이 1마리, 고양이끼리 인접 불가",
   "type": "module",
   "engines": {

@@ -1,5 +1,18 @@
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { type Plugin, defineConfig } from 'vite';
 import { createStateHandler } from './server/stateStore.ts';
+
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
+
+function buildRevision(): string {
+  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA.slice(0, 7);
+  try {
+    return execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], { encoding: 'utf8' }).trim();
+  } catch {
+    return 'dev';
+  }
+}
 
 // host: true → 0.0.0.0 으로 열어서 같은 네트워크(또는 Tailscale)의 폰에서도 바로 접속한다.
 // allowedHosts → IP 주소 접속은 기본 허용. 호스트 이름은 mDNS(*.local)·Tailscale(*.ts.net)만 추가로 연다.
@@ -19,6 +32,10 @@ function stateApi(): Plugin {
 
 export default defineConfig({
   base: './',
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __BUILD_REVISION__: JSON.stringify(buildRevision()),
+  },
   plugins: [stateApi()],
   server: { host: true, port: 5173, allowedHosts },
   preview: { host: true, port: 4173, allowedHosts },

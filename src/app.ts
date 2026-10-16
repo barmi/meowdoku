@@ -1,4 +1,5 @@
 import { dailyPuzzle, difficultyOf, levelPuzzle, todayKey } from './core/levels';
+import { buildLabel } from './buildInfo';
 import type { WinSummary } from './game/game';
 import { Sound } from './game/sound';
 import { Stats } from './game/stats';
@@ -385,7 +386,8 @@ export class App {
         ${row('vibrate', '진동', '지원하는 기기(안드로이드 등)에서만')}
         ${row('autoX', '자동 X 표시', '고양이를 놓으면 같은 행·열·색깔과 주변 칸을 X 로 채워요')}
       </div>
-      <p class="hint-line sync-line">${this.syncLine()}</p>`,
+      <p class="hint-line sync-line">${this.syncLine()}</p>
+      <p class="app-build">${buildLabel()}</p>`,
       actions: [
         { label: '게임 방법', kind: 'soft', onClick: () => void setTimeout(() => this.showHelp(), 30) },
         view

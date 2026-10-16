@@ -1184,6 +1184,13 @@ button {
   margin-top: calc(6 * var(--px));
 }
 
+.app-build {
+  margin: calc(7 * var(--px)) 0 0;
+  color: var(--ink-soft);
+  font-size: calc(11.5 * var(--px));
+  letter-spacing: 0.02em;
+}
+
 .setting {
   display: flex;
   align-items: center;
