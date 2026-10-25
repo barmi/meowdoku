@@ -110,7 +110,7 @@ export class GameView {
   private page: 'rules' | 'markers' = 'rules';
   private track!: HTMLElement;
   private swipe: { x: number; y: number } | null = null;
-  /** 고른 마커 도구: 1~3 모양, 0 지우개, null 이면 마커 모드 아님 */
+  /** 고른 마커 도구: 4(?), 1(세모), 0 지우개, null 이면 마커 모드 아님 */
   private tool: number | null = null;
   private intervals: number[] = [];
   private shownScore = 0;
@@ -191,7 +191,7 @@ export class GameView {
           <div class="track">
             <div class="page rules" data-page="rules">${RULES.map(([spec, text]) => `<div class="rule">${miniGrid(spec)}<span>${text}</span></div>`).join('')}</div>
             <div class="page markers" data-page="markers">
-              ${([1, 2, 3, 4] as NoteShape[])
+              ${([NOTE_QUESTION, 1] as NoteShape[])
                 .map((k) => `<button class="tool" data-tool="${k}" aria-pressed="false" aria-label="${NOTE_NAMES[k]} 마커">${noteToolIcon(k)}<span>${NOTE_NAMES[k]}</span></button>`)
                 .join('')}
               <button class="tool" data-tool="0" aria-pressed="false"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#ico-eraser"/></svg><span>지우개</span></button>
