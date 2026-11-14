@@ -16,6 +16,7 @@ export interface SheetHandle {
 let openCount = 0;
 
 export const isSheetOpen = (): boolean => openCount > 0;
+const overlayHost = (): HTMLElement => document.getElementById('portrait-shell') ?? document.body;
 
 export function openSheet(opts: {
   html: string;
@@ -54,7 +55,7 @@ export function openSheet(opts: {
     if (e.target === overlay && opts.dismissible !== false) close();
   });
   document.addEventListener('keydown', onKey);
-  document.body.appendChild(overlay);
+  overlayHost().appendChild(overlay);
   openCount++;
   return { root: sheet, close };
 }
@@ -66,7 +67,7 @@ export function toast(message: string, ms = 1700): void {
   if (!toastEl) {
     toastEl = document.createElement('div');
     toastEl.className = 'toast';
-    document.body.appendChild(toastEl);
+    overlayHost().appendChild(toastEl);
   }
   toastEl.textContent = message;
   toastEl.classList.add('show');
@@ -75,7 +76,7 @@ export function toast(message: string, ms = 1700): void {
 }
 
 /** 물고기·발바닥·고양이 조각이 쏟아진다. parent 로 창(overlay)을 주면 창 뒤·배경 위로 떨어진다. */
-export function confetti(count = 36, parent: HTMLElement = document.body): void {
+export function confetti(count = 36, parent: HTMLElement = overlayHost()): void {
   const kinds = ['art-fish', 'ico-paw', 'cat-static', 'art-fish'];
   const colors = ['#FA9D5C', '#D36F8F', '#8979DA', '#38A9C0', '#2A8C53', '#CDA400'];
   for (let i = 0; i < count; i++) {
