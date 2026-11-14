@@ -12,6 +12,7 @@ import { GameView, ITEM_DESC, ITEM_LABEL } from './ui/gameView';
 import { HomeView } from './ui/homeView';
 import { StatsView } from './ui/statsView';
 import { watchLayout } from './ui/layout';
+import { watchPortraitOrientation } from './ui/orientation';
 import { confetti, openSheet, toast } from './ui/overlay';
 
 const MAX_LEVEL = 9999;
@@ -43,6 +44,7 @@ export class App {
     document.body.insertAdjacentHTML('afterbegin', spriteMarkup());
     this.applySettings();
     watchLayout();
+    watchPortraitOrientation();
     // 화면이 가려질 때(다른 기기로 옮겨 갈 때) 바로 저장하고, 돌아오면 다른 기기의 진행을 확인한다
     const flush = () => {
       if (this.view instanceof GameView) this.view.persistNow(false);
