@@ -22,6 +22,7 @@ import type { Stats } from '../game/stats';
 import type { ItemKey, SaveData } from '../game/storage';
 import { catFace, noteToolIcon, use } from './art';
 import { calmMotion } from './layout';
+import { portraitRotation, unrotateDelta, unrotatePoint } from './orientation';
 import { isSheetOpen, openSheet, toast } from './overlay';
 
 export interface GameHost {
@@ -487,8 +488,7 @@ export class GameView {
       const s = this.swipe;
       this.swipe = null;
       if (!s) return;
-      const dx = e.clientX - s.x;
-      const dy = e.clientY - s.y;
+      const { x: dx, y: dy } = unrotateDelta(e.clientX - s.x, e.clientY - s.y, portraitRotation());
       if (Math.abs(dx) > 36 && Math.abs(dx) > Math.abs(dy) * 1.3) this.flipPage(dx > 0 ? 'right' : 'left');
     });
     this.root.addEventListener('click', (e) => {
@@ -523,8 +523,9 @@ export class GameView {
   private cellAt(x: number, y: number): number {
     const r = this.board.getBoundingClientRect();
     const n = this.game.n;
-    const col = Math.floor(((x - r.left) / r.width) * n);
-    const row = Math.floor(((y - r.top) / r.height) * n);
+    const point = unrotatePoint((x - r.left) / r.width, (y - r.top) / r.height, portraitRotation());
+    const col = Math.floor(point.x * n);
+    const row = Math.floor(point.y * n);
     if (col < 0 || row < 0 || col >= n || row >= n) return -1;
     return row * n + col;
   }

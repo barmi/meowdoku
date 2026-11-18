@@ -46,6 +46,41 @@ export function counterRotation(orientationAngle: number): number {
   return normalized === 270 ? 90 : -90;
 }
 
+export interface Point {
+  x: number;
+  y: number;
+}
+
+function quarterTurn(rotation: number): -90 | 0 | 90 {
+  const normalized = ((rotation % 360) + 360) % 360;
+  if (normalized === 90) return 90;
+  if (normalized === 270) return -90;
+  return 0;
+}
+
+/** 회전된 화면의 정규화 좌표를 회전 전 세로 좌표로 되돌린다. */
+export function unrotatePoint(x: number, y: number, rotation: number): Point {
+  const turn = quarterTurn(rotation);
+  if (turn === -90) return { x: 1 - y, y: x };
+  if (turn === 90) return { x: y, y: 1 - x };
+  return { x, y };
+}
+
+/** 화면에서 잰 드래그 벡터를 회전 전 세로 방향의 벡터로 되돌린다. */
+export function unrotateDelta(x: number, y: number, rotation: number): Point {
+  const turn = quarterTurn(rotation);
+  if (turn === -90) return { x: -y, y: x };
+  if (turn === 90) return { x: y, y: -x };
+  return { x, y };
+}
+
+/** 현재 앱 컨테이너에 적용된 세로 좌표계 역회전 각도. */
+export function portraitRotation(): number {
+  if (document.body.classList.contains('portrait-rotate-ccw')) return -90;
+  if (document.body.classList.contains('portrait-rotate-cw')) return 90;
+  return 0;
+}
+
 function landscapeAngle(): number {
   const orientation = (window.screen as Screen & { orientation?: LockableOrientation }).orientation;
   if (orientation?.angle === 90 || orientation?.angle === 270) return orientation.angle;
